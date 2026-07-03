@@ -4,6 +4,8 @@
  */
 package com.mycompany.projektdist;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedList;
 import java.util.Vector;
 import java.util.Random;
@@ -16,9 +18,12 @@ import java.util.StringTokenizer;
 public class ConsensusProcess extends Process{
 
     boolean Ispravan;
-    Vector<Integer> Vector;
+    Vector<Integer> V;
     Vector<Integer> Delta;
     LinkedList<Integer> Osumnjiceni;
+    LinkedList<Integer> Potvrđeni;
+    Vector<Duration> VremenskiIntervali;
+    Vector<Instant> ZadnjiPulsevi;
     LinkedList<LinkedList<Msg>> Poruke;
     LinkedList<Msg> ZadnjePoruke;
     int PrimljenePoruke;
@@ -29,9 +34,9 @@ public class ConsensusProcess extends Process{
         Ispravan=true;
         PrimljenePoruke=0;
         
-        Vector=new Vector<Integer>(numProc);
+        V=new Vector<Integer>(numProc);
         for (int i = 0; i < numProc; i++) {
-            Vector.add(null);
+            V.add(null);
         }
         Delta=new Vector<Integer>(numProc);
         for (int i = 0; i < numProc; i++) {
@@ -39,84 +44,43 @@ public class ConsensusProcess extends Process{
         }
         
         Osumnjiceni= new LinkedList<Integer>();
+        Potvrđeni = new LinkedList<Integer>();
+        VremenskiIntervali = new Vector<Duration>() ;
+        for (int i = 0; i < numProc; i++) {
+            VremenskiIntervali.add(Duration.ofMillis(500)); // or any value, or i for 0,1,2,...
+        }
+        ZadnjiPulsevi = new Vector<Instant>() ;
+        for (int i = 0; i < numProc; i++) {
+            ZadnjiPulsevi.add((Instant.now())); // or any value, or i for 0,1,2,...
+        }
+        
         Poruke = new LinkedList<>();
         for(int i=0;i<numProc;i++){
             Poruke.add(new LinkedList<Msg>());
         }
-        
         
         ZadnjePoruke=new LinkedList<Msg>();
         
         Random r= new Random();
         int r1 = r.nextInt(100);
         System.out.println("Random vrijednost je "+r1);
-        Vector.set(myId, r1);
-        System.out.println("U procesu "+myId+" vrijednost vectora je "+Vector.toString());
-        
+        V.set(myId, r1);
+        System.out.println("U procesu "+myId+" vrijednost vectora je "+V.toString());
+  
     }
     
     public Vector<Integer> getVector(){
-        return Vector;
-    }
-    public void greska(){
-        Random r= new Random();
-        int r1 = r.nextInt(10);
-        if(r1==0){
-            Ispravan=false;
-        }
-    }
-    /*public void osumnjici(){
-        Random r= new Random();
-        for(int i=0; i<N;i++){
-            int r1 = r.nextInt(4);
-            if(jesamLiDobioPorukuOd(i)==false && i!=myId && r1==0){
-                Osumnjiceni.add(i);
-                PrimljenePoruke++;
-                System.out.println("Proces "+myId+" je osumnjicio proces "+i);
-            }
-        }
-    }*/
-    
-    public boolean jeLiOsumnjicen(int id){
-        for(int i=0; i<Osumnjiceni.size();i++){
-            if(Osumnjiceni.get(i)==id){
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    public boolean jesamLiDobioPorukuOdIdURundi(int id,int runda){
-        for(int i=0; i<Poruke.get(runda).size();i++){
-            if(Poruke.get(runda).get(i).getSrcId()==id){
-                return true;
-            }
-        }
-        return false;
+        return V;
     }
 
     public int kolikoSamPorukaPrimioURundi(int runda){
         System.out.println("Primio sam "+Poruke.get(runda-1).size()+" poruka u rundi "+runda);
         return Poruke.get(runda-1).size();
     }
-    public boolean moguLiNastaviti(){
-        //Moram posalti sve poruke i primiti sve poruke, ne mogu poslati poruku sebi niti primiti svoju poruku
-        if(PrimljenePoruke<2*N-2){
-            return false;
-        }
-        System.out.println("Process "+myId+" nastavlja s radom");
-        return true;
+    
+    public int kolikoJeProcesaOsumnjiceno(){
+        return Osumnjiceni.size();
     }
-    /*public void obradiPoruke(){
-        Delta.clear();
-        for (int i = 0; i < N; i++) {
-            Delta.add(null);
-        }
-        for(int k=1;k<N;k++){
-            if(Vector.get(k)==null && jesamLiDobioPorukuOd(k)){
-            }
-        }
-    }*/
     
     public void ispisiSvePorukeURundi(int runda){
         for(int j=0;j<Poruke.get(runda-1).size();j++){
@@ -126,6 +90,14 @@ public class ConsensusProcess extends Process{
             System.out.println(j+". poruka dolazi od procesa "+m.getSrcId()+" u rundi "+kojaRunda+" i glasi "+m.getMessage());
         }
         
+    }
+    public void provjeriProces(int src){
+        Instant now = Instant.now();
+        Duration TimeElapsed = Duration.between(ZadnjiPulsevi.get(src), now);
+        if(!Osumnjiceni.contains(src) && TimeElapsed.compareTo(VremenskiIntervali.get(src)) > 0){
+            System.out.println("Proces "+src+" mi je sumnjiv");
+            Osumnjiceni.add(src);
+        }
     }
     public void novaRunda(){
         PrimljenePoruke=0;
@@ -143,6 +115,15 @@ public class ConsensusProcess extends Process{
                 notify();
                 
             }
+            else if(tag.equals("Alive")){
+                System.out.println("Proces "+src+" javlja da je živ");
+                ZadnjiPulsevi.set(src,Instant.now());
+                if(Osumnjiceni.contains(src)){
+                    System.out.println("Proces "+src+" mi više nije sumnjiv");
+                    Osumnjiceni.remove((Integer)src);
+                    VremenskiIntervali.set(src,VremenskiIntervali.get(src).plusMillis(500));
+                }
+            }
             else if(tag.equals("Confirm")) {
 
             }
@@ -150,5 +131,6 @@ public class ConsensusProcess extends Process{
 
             }
         }
+        
     }
 }

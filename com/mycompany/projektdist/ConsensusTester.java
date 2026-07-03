@@ -35,8 +35,21 @@ try {
             }
         }
         do{
-            Thread.sleep(100);
-        }while(process.kolikoSamPorukaPrimioURundi(runda)<numProc-1);
+            
+            for (int j = 0; j < numProc; j++){
+                if (j != myId){
+                    process.sendMsg(j,"Alive",runda,process.getVector());
+                }
+            }
+            for (int j = 0; j < numProc; j++){
+                if (j != myId){
+                    process.provjeriProces(j);
+                }
+            }
+            Thread.sleep(1000);
+        }while(process.kolikoSamPorukaPrimioURundi(runda)+process.kolikoJeProcesaOsumnjiceno()<numProc-1);
+        System.out.println("--------------------------");
+        System.out.println("Dobio sam poruke od svih ili su mi postali sumnjivi");
 
         process.ispisiSvePorukeURundi(runda);
         process.novaRunda();
