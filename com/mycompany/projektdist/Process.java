@@ -35,17 +35,17 @@ public void sendMsg(int destId, String tag) {
 sendMsg(destId, tag, " 0 ");
 }
 
-public void sendMsg(int desId, String tag,int runda, Vector<Integer> vector){
+public void sendMsg(int desId, String tag,int runda, Vector<Integer> delta){
     if(tag.equals("Alive")){
         System.out.println("Javljam procesu "+desId+" da sam živ");
     }
     else if(tag.equals("Consensus")){
-        System.out.println("Šaljem vector "+vector.toString()+" procesu "+desId+" u rundi "+runda);
+        System.out.println("Šaljem vector "+delta.toString()+" procesu "+desId+" u rundi "+runda);
     }
     
     String MsgString=String.valueOf(runda);
-    for(int i=0;i<vector.size();i++){
-        MsgString=MsgString+" "+vector.get(i);
+    for(int i=0;i<delta.size();i++){
+        MsgString=MsgString+" "+delta.get(i);
     }
     sendMsg(desId,tag,MsgString);
 }

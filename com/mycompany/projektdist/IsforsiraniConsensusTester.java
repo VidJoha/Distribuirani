@@ -10,7 +10,17 @@ import java.util.Random;
  *
  * @author Vid
  */
-public class ConsensusTester {
+
+//OVO JE ISFORSIRANI CONSENSUSTESTER TAKO DA SE FAZA 2 IZ ALGORITMA 15.3 PRIMJENI
+//PROCES 0 JE "JAKO SPOR" I NE STIGNE NA VRIJEME POSLATI PORUKE OSTALIM PROCESIMA PRIJE NEGO GA ONI POCNU SUMNJAT I PRESTANU CEKAT NJEGOVE PORUKE
+//U OVOM ALGORITMU ON SAMO NE POSALJE PORUKE RADI JEDNOSTAVNOSTI IMPLEMENTACIJE ALI JE REZULTAT ISTI, OSTALI PROCESI NE OBRADE NJEGOVU PORUKU I NJIHOV
+//VECTOR V I DELTA SE NE PROMJENE
+//U ZADNJOJ RUNDI PROCES 0 IPAK USPIJE POSLATI 1 PORUKU PROCESU 1 ALI ODMAH NAKON TOG SE POKVARI
+//PROCES 1 USPIJE OBRADITI NJEGOVU PORUKU I NJEGOV VECTOR V SE NE PROMJENI ALI JE ZADNJA RUNDA I NE STIGNE POSLATI DELTU OSTALIMA
+//TAKO DA U ZAVRSNOJ PROVJERI SE NJEGOV VECTOR V RAZLIKUJE OD DRUGIH NA MJESTU 0 A ALGORITAM ONDA TU VRIJEDNOST NA TOM MJESTU PROMJENI U NULL
+//I TA VRIJEDNOST SE PRESKACE U KONSENZUSU
+
+public class IsforsiraniConsensusTester {
     public static void kvar(){
         Random r= new Random();
         int r1 = r.nextInt(100);
@@ -50,44 +60,63 @@ try {
 
         for (int j = 0; j < numProc; j++){
             if (j != myId){
-                process.sendMsg(j,"Consensus",runda,process.getDelta());
-                kvar();
+                if(myId!=0){
+                    process.sendMsg(j,"Consensus",runda,process.getDelta());
+                }
+                else if(myId==0 && (runda==1 || runda==2)){
+                    System.out.println("(za laksu implementaciju proces ne salje poruke) Ovaj proces je 'spor' i nece polsat poruke ovu "+runda+". rundu (ideja je da je proces ZAPRAVO jako spor, posalje poruke prekasno a drugi procesi su prestali čekat njegove poruke iz ove runde)");
+                    Thread.sleep(500);
+                }
+                
+                else if(myId==0 && runda==3){
+                    process.sendMsg(1,"Consensus",runda,process.getDelta());
+                    prisilniKvar();
+                }
+
+                //kvar();
             }
         }
-
-        do{
-            kvar();
-            for (int j = 0; j < numProc; j++){
-                if (j != myId){
-                    process.sendMsg(j,"Alive",runda,process.getDelta());
+        if(myId!=0){
+            do{
+                //kvar();
+                for (int j = 0; j < numProc; j++){
+                    if (j != myId){
+                        process.sendMsg(j,"Alive",runda,process.getDelta());
+                    }
                 }
-            }
-            for (int j = 0; j < numProc; j++){
-                if (j != myId){
-                    process.provjeriProces(j);
+                for (int j = 0; j < numProc; j++){
+                    if (j != myId){
+                        process.provjeriProces(j);
+                    }
                 }
-            }
-            Thread.sleep(1000);
-        }while(process.kolikoSamPorukaPrimioURundi(runda)+process.kolikoJeProcesaOsumnjiceno()<numProc-1);
-
+                Thread.sleep(1000);
+            }while(process.kolikoSamPorukaPrimioURundi(runda)+process.kolikoJeProcesaOsumnjiceno()<numProc-1);
+        }
         System.out.println("--------------------------");
         System.out.println("Dobio sam poruke od svih ili su mi postali sumnjivi");
 
         process.ispisiSvePorukeURundi(runda);
-
-        process.obradiPoruke(runda);
-
+        if(myId!=0){
+            process.obradiPoruke(runda);
+        }
+        if(myId==0 && runda==2){
+            for (int j = 0; j < numProc; j++){
+                    if (j != myId){
+                        process.sendMsg(j,"Alive",runda,process.getDelta());
+                    }
+                }
+        }
         process.novaRunda();
         
     }
     for (int j = 0; j < numProc; j++){
             if (j != myId){
                 process.sendMsg(j,"Provjera",numProc,process.getVector());
-                kvar();
+                //kvar();
             }
         }
     do{
-            kvar();
+            //kvar();
             for (int j = 0; j < numProc; j++){
                 if (j != myId){
                     process.sendMsg(j,"Alive",numProc,process.getVector());

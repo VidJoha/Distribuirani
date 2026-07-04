@@ -45,15 +45,16 @@ public class ConsensusProcess extends Process{
             Delta.add(null);
         }
         
+        
         Osumnjiceni= new LinkedList<Integer>();
         Potvrđeni = new LinkedList<Integer>();
         VremenskiIntervali = new Vector<Duration>() ;
         for (int i = 0; i < numProc; i++) {
-            VremenskiIntervali.add(Duration.ofMillis(500)); // or any value, or i for 0,1,2,...
+            VremenskiIntervali.add(Duration.ofMillis(500)); 
         }
         ZadnjiPulsevi = new Vector<Instant>() ;
         for (int i = 0; i < numProc; i++) {
-            ZadnjiPulsevi.add((Instant.now())); // or any value, or i for 0,1,2,...
+            ZadnjiPulsevi.add((Instant.now())); 
         }
         
         Poruke = new LinkedList<>();
@@ -67,14 +68,18 @@ public class ConsensusProcess extends Process{
         int r1 = r.nextInt(100);
         System.out.println("Random vrijednost je "+r1);
         V.set(myId, r1);
+        Delta.set(myId, r1);
         System.out.println("U procesu "+myId+" vrijednost vectora je "+V.toString());
+        System.out.println("U procesu "+myId+" vrijednost delte je "+Delta.toString());
   
     }
     
     public Vector<Integer> getVector(){
         return V;
     }
-
+    public Vector<Integer> getDelta(){
+        return Delta;
+    }
     public int kolikoSamPorukaPrimioURundi(int runda){
         System.out.println("Primio sam "+Poruke.get(runda-1).size()+" poruka u rundi "+runda);
         return Poruke.get(runda-1).size();
@@ -112,18 +117,21 @@ public class ConsensusProcess extends Process{
             Delta.set(i, null);
         }
         System.out.println("Poruke su");
-        System.out.println(Poruke);
+        System.out.println(Poruke.get(runda-1));
         for (int i = 0; i < numProc; i++) {
             if(V.get(i)==null){
                 for(int j = 0; j < Poruke.get(runda-1).size(); j++){
-                    if(Poruke.get(runda-1).get(j)!=null && i!=myId && Poruke.get(runda-1).get(j).getSrcId()==i){
-                        System.out.println("Idem obraditi poruku "+Poruke.get(runda-1).get(j).getMessage()+" od procesa "+i);
+                    if(Poruke.get(runda-1).get(j)!=null){
+                        System.out.println("Idem obraditi poruku "+Poruke.get(runda-1).get(j).getMessage()+" od procesa "+Poruke.get(runda-1).get(j).getSrcId());
                         String[] tokeni = Poruke.get(runda-1).get(j).getMessage().trim().split("\\s+");
                         Integer[] rezultat = new Integer[tokeni.length];
                         rezultat[i]=tokeni[i+1].equals("null") ? null : Integer.parseInt(tokeni[i+1]);
                         System.out.println("rezultat[i]: "+rezultat[i]);
-                        V.set(i,rezultat[i]);
-                        Delta.set(i,rezultat[i]);
+                        if(rezultat[i]!=null){
+                            V.set(i,rezultat[i]);
+                            Delta.set(i,rezultat[i]);
+                        }
+                        
 
                     }
                 }
@@ -139,13 +147,12 @@ public class ConsensusProcess extends Process{
     }
     public void novaRunda(){
         PrimljenePoruke=0;
-        Poruke.add(new LinkedList<Msg>());
     }
     
     public void provjeriZadnjePoruke(int proces){
         for(int i = 0; i<ZadnjePoruke.size() ; i++){
             if(ZadnjePoruke.get(i).getSrcId()==proces){
-                System.out.println("Idem obraditi zadnju poruku "+ZadnjePoruke.get(i).getMessage()+" od procesa "+i);
+                System.out.println("Idem obraditi zadnju poruku "+ZadnjePoruke.get(i).getMessage()+" od procesa "+ZadnjePoruke.get(i).getSrcId());
                 String[] tokeni = ZadnjePoruke.get(i).getMessage().trim().split("\\s+");
                 Integer[] rezultat = new Integer[tokeni.length];
                 rezultat[i]=tokeni[i+1].equals("null") ? null : Integer.parseInt(tokeni[i+1]);
@@ -163,7 +170,7 @@ public class ConsensusProcess extends Process{
                 int kojaRunda=Integer.parseInt(st.nextToken());
                 
                 System.out.println("Dodao sam vector"+m.getMessage()+" od procesa "+src+" u Poruke u rundi "+kojaRunda);
-                ZadnjePrimljenePoruke++;
+                PrimljenePoruke++;
                 Poruke.get(kojaRunda-1).add(m);
                 notify();
                 
@@ -179,7 +186,7 @@ public class ConsensusProcess extends Process{
             }
             else if(tag.equals("Provjera")) {
                 System.out.println("Dobio sam završni vektor od procesa "+src+" i dodao sam ga u zadnje poruke");
-                PrimljenePoruke++;
+                ZadnjePrimljenePoruke++;
                 ZadnjePoruke.add(m);
             }
             else if(tag.equals("Decide")){
