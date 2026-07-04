@@ -27,12 +27,14 @@ public class ConsensusProcess extends Process{
     LinkedList<LinkedList<Msg>> Poruke;
     LinkedList<Msg> ZadnjePoruke;
     int PrimljenePoruke;
+    int ZadnjePrimljenePoruke;
     
     public ConsensusProcess(Linker initComm,int numProc) {
         super(initComm);
         
         Ispravan=true;
         PrimljenePoruke=0;
+        ZadnjePrimljenePoruke=0;
         
         V=new Vector<Integer>(numProc);
         for (int i = 0; i < numProc; i++) {
@@ -77,6 +79,10 @@ public class ConsensusProcess extends Process{
         System.out.println("Primio sam "+Poruke.get(runda-1).size()+" poruka u rundi "+runda);
         return Poruke.get(runda-1).size();
     }
+    public int kolikoSamZadnjihPorukaPrimio(){
+        System.out.println("Primio sam "+ZadnjePrimljenePoruke+" zadnjih poruka");
+        return ZadnjePrimljenePoruke;
+    }
     
     public int kolikoJeProcesaOsumnjiceno(){
         return Osumnjiceni.size();
@@ -99,9 +105,56 @@ public class ConsensusProcess extends Process{
             Osumnjiceni.add(src);
         }
     }
+    public void obradiPoruke(int runda){
+        int numProc=Delta.size();
+
+        for (int i = 0; i < numProc; i++) {
+            Delta.set(i, null);
+        }
+        System.out.println("Poruke su");
+        System.out.println(Poruke);
+        for (int i = 0; i < numProc; i++) {
+            if(V.get(i)==null){
+                for(int j = 0; j < Poruke.get(runda-1).size(); j++){
+                    if(Poruke.get(runda-1).get(j)!=null && i!=myId && Poruke.get(runda-1).get(j).getSrcId()==i){
+                        System.out.println("Idem obraditi poruku "+Poruke.get(runda-1).get(j).getMessage()+" od procesa "+i);
+                        String[] tokeni = Poruke.get(runda-1).get(j).getMessage().trim().split("\\s+");
+                        Integer[] rezultat = new Integer[tokeni.length];
+                        rezultat[i]=tokeni[i+1].equals("null") ? null : Integer.parseInt(tokeni[i+1]);
+                        System.out.println("rezultat[i]: "+rezultat[i]);
+                        V.set(i,rezultat[i]);
+                        Delta.set(i,rezultat[i]);
+
+                    }
+                }
+            }
+            else if(V.get(i)!=null){
+                        System.out.println("Vrijednost od V na indexu "+i+" nije null nego "+V.get(i));
+                    }
+        }
+        System.out.println("Vektor V je ");
+        System.out.println(V);
+        System.out.println("Vektor Delta je ");
+        System.out.println(Delta);
+    }
     public void novaRunda(){
         PrimljenePoruke=0;
         Poruke.add(new LinkedList<Msg>());
+    }
+    
+    public void provjeriZadnjePoruke(int proces){
+        for(int i = 0; i<ZadnjePoruke.size() ; i++){
+            if(ZadnjePoruke.get(i).getSrcId()==proces){
+                System.out.println("Idem obraditi zadnju poruku "+ZadnjePoruke.get(i).getMessage()+" od procesa "+i);
+                String[] tokeni = ZadnjePoruke.get(i).getMessage().trim().split("\\s+");
+                Integer[] rezultat = new Integer[tokeni.length];
+                rezultat[i]=tokeni[i+1].equals("null") ? null : Integer.parseInt(tokeni[i+1]);
+                
+                if(rezultat[i]==null){
+                    V.set(i, null);
+                }
+            }
+        }
     }
     public synchronized void handleMsg(Msg m, int src, String tag) {
         if(Ispravan==true){
@@ -110,7 +163,7 @@ public class ConsensusProcess extends Process{
                 int kojaRunda=Integer.parseInt(st.nextToken());
                 
                 System.out.println("Dodao sam vector"+m.getMessage()+" od procesa "+src+" u Poruke u rundi "+kojaRunda);
-                PrimljenePoruke++;
+                ZadnjePrimljenePoruke++;
                 Poruke.get(kojaRunda-1).add(m);
                 notify();
                 
@@ -124,8 +177,10 @@ public class ConsensusProcess extends Process{
                     VremenskiIntervali.set(src,VremenskiIntervali.get(src).plusMillis(500));
                 }
             }
-            else if(tag.equals("Confirm")) {
-
+            else if(tag.equals("Provjera")) {
+                System.out.println("Dobio sam završni vektor od procesa "+src+" i dodao sam ga u zadnje poruke");
+                PrimljenePoruke++;
+                ZadnjePoruke.add(m);
             }
             else if(tag.equals("Decide")){
 

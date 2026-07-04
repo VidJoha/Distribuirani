@@ -52,10 +52,40 @@ try {
         System.out.println("Dobio sam poruke od svih ili su mi postali sumnjivi");
 
         process.ispisiSvePorukeURundi(runda);
+        
+        process.obradiPoruke(runda);
         process.novaRunda();
         
     }
-    System.out.println("For ne radi nista, gotov");
+    for (int j = 0; j < numProc; j++){
+            if (j != myId){
+                process.sendMsg(j,"Provjera",numProc,process.getVector());
+            }
+        }
+    do{
+            
+            for (int j = 0; j < numProc; j++){
+                if (j != myId){
+                    process.sendMsg(j,"Alive",numProc,process.getVector());
+                }
+            }
+            for (int j = 0; j < numProc; j++){
+                if (j != myId){
+                    process.provjeriProces(j);
+                }
+            }
+            Thread.sleep(1000);
+        }while(process.kolikoSamZadnjihPorukaPrimio()+process.kolikoJeProcesaOsumnjiceno()<numProc-1);
+    for (int j = 0; j < numProc; j++){
+            process.provjeriZadnjePoruke(j);
+        }
+    for(int i = 0; i < process.V.size() ; i++){
+        if(process.V.get(i)!=null){
+            System.out.println("Svi procesi se slažu oko vrijednosti "+process.V.get(i));
+            break;
+        }
+    }
+
     
 }
 catch (Exception e) {
