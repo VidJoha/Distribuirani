@@ -1,0 +1,608 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue}
+
+% hrvatski nazivi (bez babela, jer croatian jezik nije instaliran na sustavu)
+\renewcommand{\abstractname}{Sažetak}
+\renewcommand{\tablename}{Tablica}
+\renewcommand{\figurename}{Slika}
+\renewcommand{\refname}{Literatura}
+\floatname{algorithm}{Algoritam}
+
+% oznake klasa detektora (kao u prezentaciji)
+\newcommand{\Dp}{\ensuremath{\mathcal{P}}}
+\newcommand{\Ds}{\ensuremath{\mathcal{S}}}
+\newcommand{\Dw}{\ensuremath{\mathcal{W}}}
+\newcommand{\Dv}{\ensuremath{\mathcal{V}}}
+\newcommand{\eP}{\ensuremath{\Diamond\mathcal{P}}}
+\newcommand{\eS}{\ensuremath{\Diamond\mathcal{S}}}
+\newcommand{\eW}{\ensuremath{\Diamond\mathcal{W}}}
+\newcommand{\eV}{\ensuremath{\Diamond\mathcal{V}}}
+\newcommand{\Crashed}{\mathrm{Crashed}}
+\newcommand{\Up}{\mathrm{Up}}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{gray!70!black},
+  numbers=left,numberstyle=\tiny\color{gray},
+  frame=single,breaklines=true,
+  showstringspaces=false,
+  language=Java,
+  literate={č}{{\v{c}}}1 {ć}{{\'c}}1 {ž}{{\v{z}}}1 {š}{{\v{s}}}1 {đ}{{\dj}}1
+           {Č}{{\v{C}}}1 {Ć}{{\'C}}1 {Ž}{{\v{Z}}}1 {Š}{{\v{S}}}1 {Đ}{{\DJ}}1
+}
+
+\title{Otkrivači grešaka u distribuiranim sustavima}
+\author{Bartol Gracin \and Vid Joha \and Matija Njegač}
+\date{Distribuirani procesi}
+
+\begin{document}
+\maketitle
+
+\section{Asinkroni sustavi i otpornost na greške}
+
+Distribuirani sustav je otporan na greške ako nastavlja ispravno raditi i kad
+neki procesi zakažu. Dvije glavne paradigme u izgradnji takvih sustava su
+konsenzus i atomsko emitiranje. Konsenzus omogućuje skupu procesa da postignu
+zajedničku odluku koja ovisi o njihovim početnim vrijednostima, bez obzira na
+kvarove. Kod atomskog emitiranja procesi pouzdano emitiraju poruke i slažu se
+oko skupa isporučenih poruka i njihova redoslijeda.
+
+Radimo u asinkronom modelu: nema gornje granice na trajanje koraka procesa ni na
+kašnjenje poruke (te su veličine konačne, ali neomeđene). To uglavnom uzrokuju
+nepredvidiva opterećenja sustava. Takav model je jednostavan i prenosiv jer ne
+ovisi o vremenskim pretpostavkama, ali ima važnu posljedicu: konsenzus i atomsko
+emitiranje ne mogu se riješiti deterministički čak ni uz jedan jedini kvar
+(rezultat Fischera, Lyncha i Patersona). Uzrok je upravo to što u asinkronom
+sustavu ne možemo razlikovati proces koji se srušio od procesa koji jako sporo
+odgovara.
+
+\section{Kvarovi}
+
+Promatramo skup od $n$ procesa $Q = \{p_1, \dots, p_n\}$ povezanih pouzdanim
+kanalima. Proces može zakazati samo zaustavljanjem (\emph{crash}): kažemo da se
+proces $p$ srušio u trenutku $t$ ako nakon $t$ više ne izvodi nijednu akciju.
+Kvarovi su trajni; srušen proces se ne oporavlja. Proces koji se nikada ne sruši
+zovemo ispravnim.
+
+Za dani tijek izvođenja $\Omega$ označavamo s $\Crashed(t,\Omega)$ skup procesa
+koji su se srušili do trenutka $t$, a $\Up(t,\Omega) = Q \setminus
+\Crashed(t,\Omega)$ skup onih koji do tada rade. Pretpostavljamo da je u svakom
+tijeku barem jedan proces ispravan.
+
+\section{Otkrivači kvarova}
+
+Otkrivač kvarova $D$ je distribuirani orakl koji daje naznake o kvarovima. Svaki
+proces $p_i$ ima svoj lokalni modul $D_i$, koji prati ostale procese i održava
+popis onih za koje trenutno sumnja da su se srušili. Sumnja se temelji na tome
+koliko dugo $p_i$ nije primio poruku od promatranog procesa.
+
+Cijeli otkrivač je vektor $D = \langle D_{p_1}, D_{p_2}, \dots, D_{p_n} \rangle$.
+Pišemo $D_p(t)$ za skup procesa za koje modul procesa $p$ sumnja u trenutku $t$;
+ako je $q \in D_p(t)$, kažemo da $p$ sumnja na $q$ u trenutku $t$.
+
+Bitno je da otkrivači mogu pogriješiti. Ispravan proces može završiti na popisu
+sumnjivih, pa kasnije biti maknut kad modul uvidi grešku. Procesi se tako mogu
+dodavati i uklanjati s popisa proizvoljno mnogo puta, a u istom trenutku dva
+procesa mogu imati različite popise. Da bismo razlikovali koristan otkrivač od
+beskorisnog, uvodimo dva svojstva: potpunost i točnost.
+
+\section{Potpunost}
+
+Potpunost traži da otkrivač nakon nekog vremena posumnja na sve procese koji su
+se srušili.
+
+\begin{itemize}
+  \item \textbf{Jaka potpunost:} nakon nekog trenutka svaki srušeni proces trajno
+  je sumnjiv \emph{svakom} ispravnom procesu.
+  \[
+    \forall \Omega\ \forall p \in \Crashed(\Omega)\ \forall q \in \Up(\Omega)\
+    \exists t : \forall t' \ge t,\ p \in D_q(t').
+  \]
+  \item \textbf{Slaba potpunost:} nakon nekog trenutka svaki srušeni proces trajno
+  je sumnjiv \emph{nekom} ispravnom procesu.
+  \[
+    \forall \Omega\ \forall p \in \Crashed(\Omega)\ \exists q \in \Up(\Omega)\
+    \exists t : \forall t' \ge t,\ p \in D_q(t').
+  \]
+\end{itemize}
+
+Sama potpunost nije dovoljna: otkrivač koji stalno sumnja na sve procese
+zadovoljava jaku potpunost, a beskoristan je. Zato tražimo i točnost.
+
+\section{Točnost}
+
+Točnost ograničava greške, to jest sumnju na ispravan proces.
+
+\begin{itemize}
+  \item \textbf{Jaka točnost:} nijedan ispravan proces nikada nije sumnjiv
+  nijednom ispravnom procesu.
+  \[
+    \forall \Omega\ \forall t\ \forall p,q \in \Up(t) : p \notin D_q(t).
+  \]
+  \item \textbf{Slaba točnost:} neki ispravan proces nikada nije sumnjiv nijednom
+  ispravnom procesu.
+  \[
+    \forall \Omega\ \exists p \in \Up(\Omega)\ \forall t\ \forall q \in \Up(t) :
+    p \notin D_q(t).
+  \]
+\end{itemize}
+
+\subsection*{Konačna točnost}
+
+I slabu je točnost teško postići, jer otkrivač može nakratko posumnjati na
+ispravan proces i tek kasnije ispraviti grešku. Zato dodatno oslabljujemo zahtjev
+i dopuštamo rane greške, uz uvjet da one prestanu.
+
+\begin{itemize}
+  \item \textbf{Konačna jaka točnost:} postoji trenutak nakon kojeg nijedan
+  ispravan proces više nije sumnjiv nijednom ispravnom procesu.
+  \[
+    \forall \Omega\ \exists t\ \forall t' \ge t\ \forall p,q \in \Up(t') :
+    p \notin D_q(t').
+  \]
+  \item \textbf{Konačna slaba točnost:} postoji trenutak nakon kojeg neki ispravan
+  proces više nije sumnjiv nijednom ispravnom procesu.
+  \[
+    \forall \Omega\ \exists t\ \forall t' \ge t\ \exists p \in \Up(\Omega)\
+    \forall q \in \Up(\Omega) : p \notin D_q(t').
+  \]
+\end{itemize}
+
+\section{Tipovi otkrivača}
+
+Kombiniranjem dviju vrsta potpunosti i četiri vrste točnosti dobivamo osam klasa.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lllc}
+\toprule
+Klasa & Potpunost & Točnost & Oznaka \\
+\midrule
+Savršeni              & jaka  & jaka           & \Dp \\
+Konačno savršeni      & jaka  & konačna jaka   & \eP \\
+Jaki                  & jaka  & slaba          & \Ds \\
+Konačno jaki          & jaka  & konačna slaba  & \eS \\
+Slabi                 & slaba & slaba          & \Dw \\
+Konačno slabi         & slaba & konačna slaba  & \eW \\
+Slaba potpunost i jaka točnost                   & slaba & jaka           & \Dv \\
+Slaba potpunost i konačna jaka točnost                   & slaba & konačna jaka   & \eV \\
+\bottomrule
+\end{tabular}
+\label{tab:klase}
+\end{table}
+
+\section{Reduciranje otkrivača}
+
+Otkrivač $D$ je reducibilan na otkrivač $E$ ako postoji distribuirani algoritam
+$T_{D \to E}$ koji izlaz od $D$ pretvara u izlaz sa svojstvima od $E$. Tada je
+svaki problem rješiv pomoću $E$ rješiv i pomoću $D$, pa kažemo da je $E$ slabiji
+od $D$ i pišemo $D \succeq E$. Ako vrijedi i $E \succeq D$, otkrivači su
+ekvivalentni, $D \equiv E$.
+
+Iz trivijalne redukcije (svaki proces periodički prepiše izlaz svog modula) odmah
+slijedi
+\[
+  \Dp \succeq \Dv, \qquad \Ds \succeq \Dw, \qquad
+  \eP \succeq \eV, \qquad \eS \succeq \eW.
+\]
+Ključna je obrnuta redukcija (Algoritam~15.1 u knjizi): svaki proces periodički
+šalje svoj popis sumnjivih ostalima, čime se slaba potpunost pojačava u jaku uz
+očuvanje točnosti. Odatle
+\[
+  \Dv \succeq \Dp, \qquad \Dw \succeq \Ds, \qquad
+  \eV \succeq \eP, \qquad \eW \succeq \eS,
+\]
+pa vrijede ekvivalencije
+\[
+  \Dp \equiv \Dv, \qquad \Ds \equiv \Dw, \qquad
+  \eP \equiv \eV, \qquad \eS \equiv \eW.
+\]
+
+Posljedica je važna: dovoljno je riješiti problem za četiri klase s jakom
+potpunošću ($\Dp, \eP, \Ds, \eS$) i automatski je riješen za preostale četiri. K
+tome je $\Dp \succeq \Ds$ i $\eP \succeq \eS$ (Slika~\ref{fig:hijerarhija}), pa se
+za konsenzus sve svodi na dvije netrivijalne klase: $\Ds$ i $\eS$.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[>=Latex, node distance=14mm and 22mm, every node/.style={font=\small}]
+  \node (P) {$\Dp \equiv \Dv$};
+  \node (eP) [below left=of P] {$\eP \equiv \eV$};
+  \node (S) [below right=of P] {$\Ds \equiv \Dw$};
+  \node (eS) [below right=of eP] {$\eS \equiv \eW$};
+  \draw[->] (P) -- (eP);
+  \draw[->] (P) -- (S);
+  \draw[->] (eP) -- (eS);
+  \draw[->] (S) -- (eS);
+\end{tikzpicture}
+\caption{Hijerarhija po reducibilnosti (strelica $A \to B$ znači $A \succeq B$,
+tj.\ $B$ je slabiji). Gore je najjači \Dp, dolje najslabiji \eS.}
+\label{fig:hijerarhija}
+\end{figure}
+
+\section{Konsenzus pomoću otkrivača}
+
+U konsenzusu svaki proces predlaže vrijednost, a rješenje mora zadovoljiti:
+konačnost (svaki ispravan proces odluči u konačnom vremenu), usuglašenost
+(nikoja dva ispravna procesa ne odluče različito) i valjanost (odlučena
+vrijednost je jedna od predloženih).
+
+Kao što smo vidjeli, u čisto asinkronom sustavu konsenzus je nemoguć već uz jedan
+kvar (FLP), pa je otkrivač grešaka dodatak koji tu prepreku zaobilazi. Chandra i
+Toueg pokazali su kako se konsenzus rješava za svih osam klasa, a zbog
+ekvivalencija iz prethodnog poglavlja dovoljno je promotriti $\Ds$ i $\eS$. Dva
+rezultata određuju granicu otpornosti:
+
+\begin{itemize}
+  \item \textbf{Uz \Ds{}} konsenzus se rješava bez ograničenja na broj kvarova
+  (do $n-1$ srušenih procesa). Odgovarajući algoritam (Algoritam~15.3) smo
+  implementirali; opisujemo ga u poglavlju~\ref{sec:kons-s}.
+  \item \textbf{Uz \eS{}} konsenzus se rješava samo ako je većina procesa
+  ispravna ($f < n/2$). Algoritam~15.4 koristi rotirajućeg koordinatora: u svakoj
+  rundi jedan proces prikuplja procjene većine i predlaže novu vrijednost, a
+  uvjet većine sprječava da se odluke različitih rundi raziđu.
+\end{itemize}
+
+Poanta je razlika u otpornosti: jaka (trajna) točnost klase $\Ds$ dovoljna je za
+bilo koji broj kvarova, dok konačna točnost klase $\eS$ traži ispravnu većinu. K
+tome je $\eS$ (odnosno $\eW$) najslabiji otkrivač koji uopće rješava konsenzus,
+pa u praksi težimo implementirati barem $\eP$: jači je od $\eS$, a ostvariv je u
+parcijalno sinkronom sustavu (poglavlje~\ref{sec:fd}).
+
+\section{Implementacija konsenzusa uz jaki detektor \Ds{} (Algoritam 15.3)}
+\label{sec:kons-s}
+
+Ovaj dio projekta (razred \texttt{ConsensusProcess}) rješava konsenzus uz jaki
+detektor $D \in \Ds$ i podnosi bilo koji broj kvarova (do $n-1$ srušenih
+procesa). Svaki proces $p$ drži vektor $V_p$ svojih procjena predloženih
+vrijednosti (na početku sve $\bot$, osim $V_p[p] = v_p$) i vektor $\Delta_p$
+vrijednosti koje je naučio u zadnjoj rundi. Upit ,,$q \in D_p$'' iz pseudokoda
+ostvaruje se ugrađenim detektorom (heartbeat poruke ,,Alive'' i metoda
+\texttt{provjeriProces}), po istoj ideji kao Algoritam~15.7.
+
+\begin{algorithm}[h]
+\caption{Konsenzus uz jaki detektor $D \in \Ds$ (procedura \textsc{propose}$(v_p)$
+na procesu $p$)}
+\label{alg:S}
+\begin{algorithmic}[1]
+\State $V_p \gets \langle \bot, \dots, \bot \rangle$;\quad $V_p[p] \gets v_p$;
+  \quad $\Delta_p \gets V_p$
+\Statex \textbf{Faza 1:} \textbf{za} $r_p \gets 1$ \textbf{do} $n-1$
+  \State \quad pošalji $(r_p, \Delta_p, p)$ svim procesima
+  \State \quad čekaj dok $\forall q$: primljeno $(r_p, \Delta_q, q)$ \textbf{ili}
+  $q \in D_p$ \Comment{upit detektoru}
+  \State \quad $\Delta_p \gets \langle \bot, \dots, \bot \rangle$
+  \State \quad \textbf{za} $k \gets 1$ \textbf{do} $n$
+  \State \qquad \textbf{ako} $V_p[k] = \bot$ \textbf{i} $\exists\,(r_p, \Delta_q, q)$
+  s $\Delta_q[k] \ne \bot$
+  \State \qquad\quad $V_p[k] \gets \Delta_q[k]$;\quad $\Delta_p[k] \gets \Delta_q[k]$
+\Statex \textbf{Faza 2:}
+  \State \quad pošalji $V_p$ svim procesima
+  \State \quad čekaj dok $\forall q$: primljeno $V_q$ \textbf{ili} $q \in D_p$
+  \State \quad \textbf{za} $k \gets 1$ \textbf{do} $n$: \textbf{ako} $\exists$
+  primljeni $V_q$ s $V_q[k] = \bot$ \textbf{tada} $V_p[k] \gets \bot$
+\Statex \textbf{Faza 3:}
+  \State \quad odluči prvi element vektora $V_p$ različit od $\bot$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Opis triju faza}
+
+\begin{description}
+  \item[Faza 1 ($n-1$ rundi).] U svakoj rundi proces emitira svoju $\Delta_p$
+  (vrijednosti naučene u prethodnoj rundi) i čeka poruku te runde od svakog
+  procesa koji nije osumnjičen. Ako je za neko $k$ vrijednost $V_p[k]$ još $\bot$,
+  a u primljenoj poruci nije, proces je preuzima. Nakon $n-1$ rundi svaki
+  ispravan proces zna sve vrijednosti koje su ,,preživjele''.
+  \item[Faza 2 (usklađivanje).] Proces emitira svoj cijeli vektor $V_p$ i čeka
+  vektore ostalih. Ako je bilo koji primljeni vektor imao $\bot$ na mjestu $k$,
+  proces i sam postavlja $V_p[k] \gets \bot$. Time se izbacuju vrijednosti oko
+  kojih se svi ne slažu; pokazuje se da barem jedno mjesto ostaje različito od
+  $\bot$.
+  \item[Faza 3 (odluka).] Svi ispravni procesi odluče prvi element vektora $V_p$
+  različit od $\bot$; taj je element jednak kod svih.
+\end{description}
+
+\subsection{Implementacija u Javi}
+
+Glavna petlja (u \texttt{ConsensusTester}) vodi runde Faze 1, zatim Fazu 2
+(oznaka poruke ,,Provjera'') i Fazu 3 (odluka). Doslovni kod:
+
+\begin{lstlisting}
+    for(int runda=1; runda < numProc; runda++){
+        System.out.println("--------------------------");
+        System.out.println("Započeta "+runda+". runda");
+
+        for (int j = 0; j < numProc; j++){
+            if (j != myId){
+                process.sendMsg(j,"Consensus",runda,process.getDelta());
+                kvar();
+            }
+        }
+
+        do{
+            kvar();
+            for (int j = 0; j < numProc; j++){
+                if (j != myId){
+                    process.sendMsg(j,"Alive",runda,process.getDelta());
+                }
+            }
+            for (int j = 0; j < numProc; j++){
+                if (j != myId){
+                    process.provjeriProces(j);
+                }
+            }
+            Thread.sleep(1000);
+        }while(process.kolikoSamPorukaPrimioURundi(runda)+process.kolikoJeProcesaOsumnjiceno()<numProc-1);
+
+        System.out.println("--------------------------");
+        System.out.println("Dobio sam poruke od svih ili su mi postali sumnjivi");
+
+        process.ispisiSvePorukeURundi(runda);
+
+        process.obradiPoruke(runda);
+
+        process.novaRunda();
+
+    }
+    for (int j = 0; j < numProc; j++){
+            if (j != myId){
+                process.sendMsg(j,"Provjera",numProc,process.getVector());
+                kvar();
+            }
+        }
+    do{
+            kvar();
+            for (int j = 0; j < numProc; j++){
+                if (j != myId){
+                    process.sendMsg(j,"Alive",numProc,process.getVector());
+                }
+            }
+            for (int j = 0; j < numProc; j++){
+                if (j != myId){
+                    process.provjeriProces(j);
+                }
+            }
+            Thread.sleep(1000);
+        }while(process.kolikoSamZadnjihPorukaPrimio()+process.kolikoJeProcesaOsumnjiceno()<numProc-1);
+    System.out.println("Završni vektor prije provjere je "+process.V);
+    for (int j = 0; j < numProc; j++){
+            process.provjeriZadnjePoruke(j);
+        }
+    System.out.println("Završni vektor nakon provjere je "+process.V);
+    for(int i = 0; i < process.V.size() ; i++){
+        if(process.V.get(i)!=null){
+            System.out.println("Svi procesi se slažu oko vrijednosti "+process.V.get(i));
+            break;
+        }
+    }
+\end{lstlisting}
+
+Spajanje vrijednosti u Fazi 1 (metoda \texttt{obradiPoruke}):
+
+\begin{lstlisting}
+    public void obradiPoruke(int runda){
+        int numProc=Delta.size();
+
+        for (int i = 0; i < numProc; i++) {
+            Delta.set(i, null);
+        }
+        System.out.println("Poruke su");
+        System.out.println(Poruke.get(runda-1));
+        for (int i = 0; i < numProc; i++) {
+            if(V.get(i)==null){
+                for(int j = 0; j < Poruke.get(runda-1).size(); j++){
+                    if(Poruke.get(runda-1).get(j)!=null){
+                        System.out.println("Idem obraditi poruku "+Poruke.get(runda-1).get(j).getMessage()+" od procesa "+Poruke.get(runda-1).get(j).getSrcId());
+                        String[] tokeni = Poruke.get(runda-1).get(j).getMessage().trim().split("\\s+");
+                        Integer[] rezultat = new Integer[tokeni.length];
+                        rezultat[i]=tokeni[i+1].equals("null") ? null : Integer.parseInt(tokeni[i+1]);
+                        System.out.println("rezultat[i]: "+rezultat[i]);
+                        if(rezultat[i]!=null){
+                            V.set(i,rezultat[i]);
+                            Delta.set(i,rezultat[i]);
+                        }
+
+
+                    }
+                }
+            }
+            else if(V.get(i)!=null){
+                        System.out.println("Vrijednost od V na indexu "+i+" nije null nego "+V.get(i));
+                    }
+        }
+        System.out.println("Vektor V je ");
+        System.out.println(V);
+        System.out.println("Vektor Delta je ");
+        System.out.println(Delta);
+    }
+\end{lstlisting}
+
+Izbacivanje nepotvrđenih vrijednosti u Fazi 2 (metoda
+\texttt{provjeriZadnjePoruke}):
+
+\begin{lstlisting}
+    public void provjeriZadnjePoruke(int proces){
+        for(int i = 0; i<ZadnjePoruke.size() ; i++){
+            if(ZadnjePoruke.get(i).getSrcId()==proces){
+                System.out.println("Idem obraditi zadnju poruku "+ZadnjePoruke.get(i).getMessage()+" od procesa "+ZadnjePoruke.get(i).getSrcId());
+                String[] tokeni = ZadnjePoruke.get(i).getMessage().trim().split("\\s+");
+                Integer[] rezultat = new Integer[tokeni.length];
+                rezultat[i]=tokeni[i+1].equals("null") ? null : Integer.parseInt(tokeni[i+1]);
+
+                if(rezultat[i]==null){
+                    V.set(i, null);
+                }
+            }
+        }
+    }
+\end{lstlisting}
+
+\subsection{Dokaz ispravnosti}
+
+\paragraph{Otpornost.} Algoritam podnosi do $n-1$ kvarova jer nijedna faza ne
+traži većinu: proces čeka poruku od svakog neosumnjičenog procesa, a osumnjičene
+preskače.
+
+\paragraph{Dogovor.} Slaba točnost detektora $\Ds$ jamči da postoji ispravan
+proces $p^\ast$ kojeg nitko nikada ne osumnjiči. Zato ga svi u svakoj rundi
+čekaju, pa se njegova vrijednost proširi u sve vektore i preživi Fazu 2. Svi
+ispravni procesi tako u Fazi 3 vide isti prvi element različit od $\bot$ i
+odluče jednako.
+
+\paragraph{Završetak.} Jaka potpunost detektora jamči da se srušeni procesi na
+kraju osumnjiče, pa čekanje u fazama nikada ne blokira zauvijek.
+
+\section{Implementacija otkrivača \eP{} (Algoritam 15.7)}
+\label{sec:fd}
+
+Savršen otkrivač \Dp{} ne možemo implementirati u parcijalnoj sinkroniji: dok ne
+znamo gornju granicu kašnjenja, svaki fiksni istek vremena može biti prekratak i
+osumnjičiti spor, ali ispravan proces. Najbolje što postižemo jest da takve
+greške \emph{na kraju} prestanu, a to je upravo \eP.
+
+Parcijalna sinkronost znači da je sustav u početku asinkron, ali nakon nekog
+nepoznatog trenutka postane sinkron, s omeđenim kašnjenjima. Svaki proces $p$
+drži zadani istek vremena za svaki drugi proces i mjeri vrijeme lokalnim satom
+koji broji korake (otkucaje). Koriste se varijable: $Output_p$ (popis sumnjivih,
+na početku prazan) i $\Delta_p(q)$ (trajanje isteka vremena procesa $p$ za $q$).
+
+\begin{algorithm}[h]
+\caption{Timeout implementacija $D \in \eP$ u modelu parcijalne sinkronosti
+(svaki proces $p$)}
+\label{alg:eP}
+\begin{algorithmic}[1]
+\State $Output_p \gets \emptyset$
+\ForAll{$q \in Q$}\ $\Delta_p(q) \gets$ zadani istek vremena \EndFor
+\Statex \textbf{cobegin}
+\Statex \textbf{Zadatak 1:} periodički
+  \State \quad pošalji ,,$p$ je živ'' svima
+\Statex \textbf{Zadatak 2:} periodički, za svaki $q \in Q$
+  \State \quad \textbf{ako} $q \notin Output_p$ \textbf{i} $p$ nije primio
+  ,,$q$ je živ'' u zadnjih $\Delta_p(q)$ otkucaja
+  \State \qquad $Output_p \gets Output_p \cup \{q\}$
+\Statex \textbf{Zadatak 3:} kad primiš ,,$q$ je živ''
+  \State \quad \textbf{ako} $q \in Output_p$
+  \State \qquad $Output_p \gets Output_p \setminus \{q\}$
+  \Comment{$p$ se kaje}
+  \State \qquad $\Delta_p(q) \gets \Delta_p(q) + 1$
+  \Comment{i poveća istek vremena}
+\Statex \textbf{coend}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Opis triju zadataka}
+
+\begin{description}
+  \item[Zadatak 1 (otkucaji srca).] Svaki proces svima periodički šalje poruku
+  ,,živ sam''. Kad se proces sruši, prestane ih slati.
+  \item[Zadatak 2 (istek vremena).] Ako $p$ od $q$ nije čuo ništa u zadnjih
+  $\Delta_p(q)$ otkucaja, doda $q$ među sumnjive.
+  \item[Zadatak 3 (kajanje).] Ako $p$ primi poruku od procesa kojeg sumnjiči, zna
+  da je istek vremena bio preuranjen: makne $q$ iz sumnjivih i \emph{poveća}
+  $\Delta_p(q)$, da idući put bude strpljiviji.
+\end{description}
+
+\subsection{Implementacija u Javi}
+
+Otkrivač smo izdvojili u zaseban razred \texttt{FailureDetector} unutar okvira za
+razmjenu poruka. Stanje odgovara varijablama iz pseudokoda: \texttt{Output} je
+skup sumnjivih, \texttt{delta[q]} istek vremena za $q$, \texttt{lastAlive[q]}
+otkucaj zadnje poruke od $q$, a \texttt{clock} lokalni sat.
+
+\begin{lstlisting}
+// Zadatak 1: posalji "ziv sam" svima
+public void sendHeartbeats() {
+    if (crashed) return;
+    broadcastMsg("alive", (int) clock);
+}
+
+// Zadatak 2: istek vremena -> sumnja
+public synchronized void checkTimeouts() {
+    for (int q = 0; q < N; q++) {
+        if (q == myId) continue;
+        if (!Output.contains(q) && (clock - lastAlive[q]) > delta[q]) {
+            Output.add(q);
+        }
+    }
+}
+
+// Zadatak 3: kad primim "ziv sam" od q -> kajanje + veci timeout
+public synchronized void handleMsg(Msg m, int q, String tag) {
+    if (tag.equals("alive")) {
+        lastAlive[q] = clock;
+        if (Output.contains(q)) {
+            Output.remove(q);
+            delta[q] = delta[q] + 1;
+        }
+    }
+}
+\end{lstlisting}
+
+Zadaci 1 i 2 izvode se u glavnoj petlji, gdje jedan prolaz odgovara jednom
+otkucaju (\texttt{clock++}). Zadatak 3 izvodi se asinkrono, u dretvama koje
+slušaju poruke, pa su metode koje dijele stanje označene s \texttt{synchronized}.
+
+\subsection{Dokaz ispravnosti}
+
+\paragraph{Jaka potpunost.} Srušeni proces trajno prestaje slati otkucaje.
+Razlika \texttt{clock - lastAlive[q]} tada raste bez granice i prije ili kasnije
+premaši $\Delta_p(q)$, pa $q$ ulazi u $Output_p$. Iz $Output_p$ se izlazi samo
+primitkom nove poruke od $q$, koje više nema, pa sumnja ostaje trajna.
+
+\paragraph{Konačna jaka točnost.} Nakon svake pogrešne sumnje na ispravan proces
+$q$, pri sljedećoj poruci od $q$ istek $\Delta_p(q)$ poraste za jedan. Kad sustav
+postane sinkron, kašnjenja imaju konačnu gornju granicu; $\Delta_p(q)$ nakon
+konačno mnogo grešaka premaši tu granicu i pogrešnih sumnji više nema.
+
+\subsection{Testiranje}
+
+Otkrivač smo testirali s tri procesa i scenarijima koji izdvajaju svako svojstvo
+(Tablica~\ref{tab:test}).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lp{9cm}}
+\toprule
+Scenarij & Opažanje \\
+\midrule
+Kvar procesa $p_2$ u otkucaju 10 &
+$p_0$ i $p_1$ počnu sumnjati na $p_2$ oko otkucaja 15 i zadrže ga u $Output$ do
+kraja; ispravne procese nikada ne sumnjiče. Potvrđuje jaku potpunost. \\
+\addlinespace
+Spor proces $p_2$ (otkucaj srca svakih 8 otkucaja) &
+$p_0$ i $p_1$ ga isprva više puta pogrešno osumnjiče i pokaju se, a $\Delta$ raste
+$5 \to 6 \to 7 \to 8$; nakon toga sumnje prestaju. Potvrđuje konačnu jaku
+točnost. \\
+\bottomrule
+\end{tabular}
+\caption{Rezultati testiranja otkrivača \eP.}
+\label{tab:test}
+\end{table}
+
+Drugi scenarij dobro pokazuje zašto je ovo \eP, a ne \Dp. Otkrivač pogriješi dok
+ne nauči pravi ritam sporog procesa, ali čim $\Delta$ dostigne stvarni razmak
+otkucaja, greške staju. Savršen otkrivač tu ne bi pogriješio nijednom, ali u
+parcijalnoj sinkroniji nije ostvariv.
+
+\begin{thebibliography}{9}
+\bibitem{ks}Kshemkalyani A.D., Singal M. Distributed Computing: Principles, Algorithms and Systems. Cambridge University Press, 2011.
+\end{thebibliography}
+
+\end{document}
