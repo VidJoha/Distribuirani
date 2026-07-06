@@ -11,10 +11,7 @@ import java.util.Vector;
 import java.util.Random;
 import java.util.StringTokenizer;
 
-/**
- *
- * @author Vid, Matija 
- */
+
 public class ConsensusProcess extends Process{
 
     boolean Ispravan;
@@ -231,7 +228,17 @@ public class ConsensusProcess extends Process{
             }
 
             else if (tag.equals("DECIDE")) {
+
                 receivedDecideMessages.add(m);
+                String[] parts = m.getMessage().trim().split("\\s+");
+
+                estimate = Integer.parseInt(parts[0]);
+
+                state = 1;
+
+                System.out.println("P" + myId +
+                    " received DECIDE from " + src +
+                    " value=" + estimate);
             }
         }
         
@@ -262,7 +269,7 @@ public class ConsensusProcess extends Process{
         //ovdje ćemo kasnije čitati poruke iz buffer-a
         for (Msg m : receivedPhase1Messages) {
 
-            String[] parts = m.getMessage().split("\\s+");
+            String[] parts = m.getMessage().trim().split("\\s+");
 
             int value = Integer.parseInt(parts[0]);
             int ts = Integer.parseInt(parts[1]);
@@ -297,7 +304,7 @@ public class ConsensusProcess extends Process{
 
                 coordinatorMsg = m;
 
-                String[] parts = m.getMessage().split("\\s+");
+                String[] parts = m.getMessage().trim().split("\\s+");
 
                 int value = Integer.parseInt(parts[0]);
                 int valueRound = Integer.parseInt(parts[1]);
@@ -347,14 +354,13 @@ public class ConsensusProcess extends Process{
             int ackCount = 0;
             int nackCount = 0;
 
-            // prolaz kroz sve odgovore za ovaj round
             for (Msg m : receivedPhase3Replies) {
 
                 if (m.getSrcId() != coordinatorId) {
 
-                    if (m.getMessage().equals("ACK")) {
+                    if (m.getTag().equals("ACK")) {
                         ackCount++;
-                    } else if (m.getMessage().equals("NACK")) {
+                    } else if (m.getTag().equals("NACK")) {
                         nackCount++;
                     }
                 }

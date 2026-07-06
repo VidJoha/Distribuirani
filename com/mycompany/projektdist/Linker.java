@@ -66,7 +66,7 @@ public class Linker {
         int srcId = Integer.parseInt(st.nextToken());
         int destId = Integer.parseInt(st.nextToken());
         String tag = st.nextToken();
-        String msg = st.nextToken("#");
+        String msg = st.nextToken("#").trim();
         return new Msg(srcId, destId, tag, msg);
     }
     public int getMyId() { return myId; }
