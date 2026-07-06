@@ -21,14 +21,32 @@ public class Linker {
         connector = new Connector();
         Util.println("linker kaze connectoru da connecta");
         connector.Connect(basename, myId, numProc, dataIn, dataOut);
+        //debug
+        for (int i = 0; i < numProc; i++) {
+            System.out.println("LINK " + myId + " -> " + i + " = " + dataOut[i]);
+        }
     }
     public void sendMsg(int destId, String tag, String msg) {
+        if (destId < 0 || destId >= N) {
+            System.out.println("invalid destId: " + destId);
+            return;
+        }
+
+        if (dataOut[destId] == null) {
+            System.out.println("NO LINK: " + myId + " -> " + destId);
+            return;
+        }
+        
         dataOut[destId].println(myId + " " + destId + " " +
         tag + " " + msg + "#");
         dataOut[destId].flush();
     }
     public void sendMsg(int destId, String tag) {
-    sendMsg(destId, tag, " 0 ");
+        if (dataOut[destId] == null) {
+            System.out.println(" NO LINK: " + myId + " -> " + destId);
+            return;
+        }
+        sendMsg(destId, tag, " 0 ");
     }
     public void multicast(LinkedList destIds, String tag,String msg){
         for (int i=0; i<destIds.size(); i++) {
