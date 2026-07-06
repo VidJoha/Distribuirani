@@ -10,6 +10,8 @@ import java.util.LinkedList;
 import java.util.Vector;
 import java.util.Random;
 import java.util.StringTokenizer;
+import java.util.List;
+import java.util.ArrayList;
 
 
 public class ConsensusProcess extends Process{
@@ -84,7 +86,7 @@ public class ConsensusProcess extends Process{
         System.out.println("U procesu "+myId+" vrijednost vectora je "+V.toString());
         System.out.println("U procesu "+myId+" vrijednost delte je "+Delta.toString());
 
-        this.estimate = myId;
+        this.estimate = r1;
         this.estimateRound = 0;
         this.state = 0;
         this.round = 0;
@@ -267,7 +269,8 @@ public class ConsensusProcess extends Process{
         int bestRound = estimateRound;
 
         //ovdje ćemo kasnije čitati poruke iz buffer-a
-        for (Msg m : receivedPhase1Messages) {
+        List<Msg> snapshot = new ArrayList<>(receivedPhase2Messages);
+        for (Msg m : snapshot) {
 
             String[] parts = m.getMessage().trim().split("\\s+");
 
@@ -298,7 +301,8 @@ public class ConsensusProcess extends Process{
         Msg coordinatorMsg = null;
 
         // tražimo PHASE2 poruku od koordinatora
-        for (Msg m : receivedPhase2Messages) {
+        List<Msg> snapshot = new ArrayList<>(receivedPhase2Messages);
+        for (Msg m : snapshot) {
 
             if (m.getSrcId() == coordinatorId && m.getDestId() == myId) {
 
@@ -354,7 +358,8 @@ public class ConsensusProcess extends Process{
             int ackCount = 0;
             int nackCount = 0;
 
-            for (Msg m : receivedPhase3Replies) {
+            List<Msg> snapshot = new ArrayList<>(receivedPhase2Messages);
+            for (Msg m : snapshot) {
 
                 if (m.getSrcId() != coordinatorId) {
 
@@ -392,10 +397,15 @@ public class ConsensusProcess extends Process{
         } 
 
     public void runConsensus(){
-        while(state == 0){
-            round ++;
 
+        System.out.println("P" + myId + " estimate = " + estimate);
+        while(state == 0){
+            receivedPhase1Messages.clear();
+            receivedPhase2Messages.clear();
+            receivedPhase3Replies.clear();
+            round++;
             int coordinatorId = (round%n);
+            
 
             System.out.println("Round " + round + " coordinator = " + coordinatorId);
 

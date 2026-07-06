@@ -6,10 +6,7 @@ package com.mycompany.projektdist;
 
 import java.util.Random;
 
-/**
- *
- * @author Vid, Matija
- */
+
 public class ConsensusTester {
     public static void kvar(){
         Random r= new Random();
