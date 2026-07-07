@@ -10,11 +10,10 @@ import java.util.LinkedList;
 import java.util.Vector;
 import java.util.Random;
 import java.util.StringTokenizer;
+import java.util.List;
+import java.util.ArrayList;
 
-/**
- *
- * @author Vid
- */
+
 public class ConsensusProcess extends Process{
 
     boolean Ispravan;
@@ -28,7 +27,22 @@ public class ConsensusProcess extends Process{
     LinkedList<Msg> ZadnjePoruke;
     int PrimljenePoruke;
     int ZadnjePrimljenePoruke;
-    
+
+    int estimate;
+    int estimateRound;
+
+    int state;
+
+    int round;
+    int n;
+
+    Linker linker;
+    LinkedList<Msg> receivedPhase1Messages;
+    LinkedList<Msg> receivedPhase2Messages;
+    LinkedList<Msg> receivedPhase3Replies;
+    LinkedList<Msg> receivedDecideMessages;
+
+
     public ConsensusProcess(Linker initComm,int numProc) {
         super(initComm);
         
@@ -71,7 +85,18 @@ public class ConsensusProcess extends Process{
         Delta.set(myId, r1);
         System.out.println("U procesu "+myId+" vrijednost vectora je "+V.toString());
         System.out.println("U procesu "+myId+" vrijednost delte je "+Delta.toString());
-  
+
+        this.estimate = r1;
+        this.estimateRound = 0;
+        this.state = 0;
+        this.round = 0;
+        this.n = numProc;
+        this.linker = initComm;
+
+        this.receivedPhase1Messages = new LinkedList<>();
+        this.receivedPhase2Messages = new LinkedList<>();
+        this.receivedPhase3Replies = new LinkedList<>();
+        this.receivedDecideMessages = new LinkedList<>();
     }
     
     public Vector<Integer> getVector(){
@@ -192,7 +217,253 @@ public class ConsensusProcess extends Process{
             else if(tag.equals("Decide")){
 
             }
+            else if(tag.equals("PHASE1"))
+            {
+                receivedPhase1Messages.add(m);
+            }
+            else if(tag.equals("PHASE2"))
+            {
+                receivedPhase2Messages.add(m);
+            }
+            else if (tag.equals("ACK") || tag.equals("NACK")) {
+                String[] parts = m.getMessage().split(" ");
+
+                int msgRound = Integer.parseInt(parts[0]);
+
+                if(msgRound == round)
+                    receivedPhase3Replies.add(m);
+            }
+
+            else if (tag.equals("DECIDE")) {
+
+                receivedDecideMessages.add(m);
+                String[] parts = m.getMessage().trim().split("\\s+");
+
+                estimate = Integer.parseInt(parts[0]);
+
+                state = 1;
+
+                System.out.println("P" + myId +
+                    " received DECIDE from " + src +
+                    " value=" + estimate);
+            }
         }
         
     }
+
+    public void phase1_sendEstimate(int coordinatorId) {
+
+        // pakiramo estimate + timestamp (estimateRound)
+        String payload = estimate + " " + estimateRound;
+        if (coordinatorId != myId)
+            linker.sendMsg(coordinatorId, "PHASE1", payload);
+
+        System.out.println("P" + myId +
+            " -> PHASE1 sent to " + coordinatorId +
+            " value=" + estimate +
+            " ts=" + estimateRound);
+    }
+
+    public void phase2_coordinatorSelect(int coordinatorId) {
+            // samo koordinator radi Phase 2
+        if (myId != coordinatorId) return;
+
+        System.out.println("P" + myId + " je coordinator u rundi " + round);
+
+        int bestEstimate = estimate;
+        int bestRound = estimateRound;
+        int majority = (n/2) +1;
+        while(receivedPhase1Messages.size() < majority-1)
+            {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        //ovdje ćemo kasnije čitati poruke iz buffer-a
+        List<Msg> snapshot = new ArrayList<>(receivedPhase1Messages);
+        for (Msg m : snapshot) {
+
+            String[] parts = m.getMessage().trim().split("\\s+");
+
+            int value = Integer.parseInt(parts[0]);
+            int ts = Integer.parseInt(parts[1]);
+
+            if (ts > bestRound) {
+                bestRound = ts;
+                bestEstimate = value;
+            }
+        }
+
+        // update coordinator state
+        estimate = bestEstimate;
+        estimateRound = round;
+
+        System.out.println("Coordinator picked: " + estimate);
+
+        // šalje svima novu vrijednost
+        String payload = estimate + " " + estimateRound;
+
+        linker.broadcastToAll("PHASE2", payload);
+
+        Msg self = new Msg(myId, myId, "PHASE2",payload);
+
+        receivedPhase2Messages.add(self);
+    }
+    
+
+    public void phase3_ackNack(int coordinatorId) {
+
+        Msg coordinatorMsg = null;
+
+        while(receivedPhase2Messages.isEmpty())
+        {
+            try {
+                Thread.sleep(100);
+            }
+            catch(InterruptedException e)
+            {
+                Thread.currentThread().interrupt();
+            }
+        }
+        // tražimo PHASE2 poruku od koordinatora
+        List<Msg> snapshot = new ArrayList<>(receivedPhase2Messages);
+        for (Msg m : snapshot) {
+
+            if (m.getSrcId() == coordinatorId && m.getDestId() == myId) {
+
+                coordinatorMsg = m;
+
+                String[] parts = m.getMessage().trim().split("\\s+");
+
+                int value = Integer.parseInt(parts[0]);
+                int valueRound = Integer.parseInt(parts[1]);
+
+                // prihvati vrijednost
+                estimate = value;
+                estimateRound = round;
+
+                System.out.println("P" + myId +
+                    " ACCEPT PHASE2 from " + coordinatorId +
+                    " value=" + estimate);
+
+                break;
+            }
+        }
+
+        // ako smo dobili poruku → ACK
+        if (coordinatorMsg != null || coordinatorId == myId) {
+            if (coordinatorId != myId)
+                linker.sendMsg(
+                    coordinatorId,
+                    "ACK",
+                    round + ""
+                );
+
+            else {
+                receivedPhase3Replies.add(
+                    new Msg(myId, myId, "ACK", round + "")
+                );
+            }
+
+            System.out.println("P" + myId + " -> ACK to " + coordinatorId);
+        }
+
+        // ako nismo dobili → NACK
+        else {
+            if (coordinatorId != myId)
+                linker.sendMsg(
+                    coordinatorId,
+                    "NACK",
+                    round + ""
+                );
+
+            System.out.println("P" + myId + " -> NACK to " + coordinatorId);
+        }
+    }
+
+    public void phase4_decide(int coordinatorId) {
+
+        // samo koordinator odlučuje
+        if (myId != coordinatorId) return;
+
+            int ackCount = 0;
+            int nackCount = 0;
+
+            int mmajority = (n/2)+1;
+            while(receivedPhase3Replies.size() < mmajority)
+            {
+                try {
+                    Thread.sleep(100);
+                }
+                catch(InterruptedException e)
+                {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            List<Msg> snapshot = new ArrayList<>(receivedPhase3Replies);
+            for (Msg m : snapshot) {
+
+                if (m.getSrcId() != coordinatorId) {
+
+                    if (m.getTag().equals("ACK")) {
+                        ackCount++;
+                    } else if (m.getTag().equals("NACK")) {
+                        nackCount++;
+                    }
+                }
+            }
+
+            System.out.println("P" + myId +
+                " ACK=" + ackCount +
+                " NACK=" + nackCount);
+
+            // majority rule
+            int majority = (n / 2) + 1;
+
+            if (ackCount >= majority) {
+
+                System.out.println("P" + myId +
+                    " DECIDES value = " + estimate);
+
+                // broadcast DECIDE
+                linker.broadcastToAll(
+                    "DECIDE",
+                    estimate + " " + round
+                );
+
+                state = 1; // decided
+            }
+
+            // očisti za sljedeći round
+            receivedPhase3Replies.clear();
+        } 
+
+    public void runConsensus(){
+
+        System.out.println("P" + myId + " estimate = " + estimate);
+        while(state == 0){
+            receivedPhase1Messages.clear();
+            receivedPhase2Messages.clear();
+            round++;
+            int coordinatorId = (round%n);
+            
+
+            System.out.println("Round " + round + " coordinator = " + coordinatorId);
+
+        phase1_sendEstimate(coordinatorId);
+        phase2_coordinatorSelect(coordinatorId);
+        phase3_ackNack(coordinatorId);
+        phase4_decide(coordinatorId);
+
+        try {
+            Thread.sleep(1000); // mali delay da vidiš roundove
+        } catch (InterruptedException e) {}
+    }
+
+    System.out.println("FINAL DECISION = " + estimate);
+    }
+    
 }
