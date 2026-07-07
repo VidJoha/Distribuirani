@@ -226,7 +226,12 @@ public class ConsensusProcess extends Process{
                 receivedPhase2Messages.add(m);
             }
             else if (tag.equals("ACK") || tag.equals("NACK")) {
-                receivedPhase3Replies.add(m);
+                String[] parts = m.getMessage().split(" ");
+
+                int msgRound = Integer.parseInt(parts[0]);
+
+                if(msgRound == round)
+                    receivedPhase3Replies.add(m);
             }
 
             else if (tag.equals("DECIDE")) {
@@ -267,9 +272,18 @@ public class ConsensusProcess extends Process{
 
         int bestEstimate = estimate;
         int bestRound = estimateRound;
-
+        int majority = (n/2) +1;
+        while(receivedPhase1Messages.size() < majority-1)
+            {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         //ovdje ćemo kasnije čitati poruke iz buffer-a
-        List<Msg> snapshot = new ArrayList<>(receivedPhase2Messages);
+        List<Msg> snapshot = new ArrayList<>(receivedPhase1Messages);
         for (Msg m : snapshot) {
 
             String[] parts = m.getMessage().trim().split("\\s+");
@@ -293,6 +307,10 @@ public class ConsensusProcess extends Process{
         String payload = estimate + " " + estimateRound;
 
         linker.broadcastToAll("PHASE2", payload);
+
+        Msg self = new Msg(myId, myId, "PHASE2",payload);
+
+        receivedPhase2Messages.add(self);
     }
     
 
@@ -300,6 +318,16 @@ public class ConsensusProcess extends Process{
 
         Msg coordinatorMsg = null;
 
+        while(receivedPhase2Messages.isEmpty())
+        {
+            try {
+                Thread.sleep(100);
+            }
+            catch(InterruptedException e)
+            {
+                Thread.currentThread().interrupt();
+            }
+        }
         // tražimo PHASE2 poruku od koordinatora
         List<Msg> snapshot = new ArrayList<>(receivedPhase2Messages);
         for (Msg m : snapshot) {
@@ -326,13 +354,19 @@ public class ConsensusProcess extends Process{
         }
 
         // ako smo dobili poruku → ACK
-        if (coordinatorMsg != null) {
+        if (coordinatorMsg != null || coordinatorId == myId) {
             if (coordinatorId != myId)
                 linker.sendMsg(
                     coordinatorId,
                     "ACK",
                     round + ""
                 );
+
+            else {
+                receivedPhase3Replies.add(
+                    new Msg(myId, myId, "ACK", round + "")
+                );
+            }
 
             System.out.println("P" + myId + " -> ACK to " + coordinatorId);
         }
@@ -358,7 +392,18 @@ public class ConsensusProcess extends Process{
             int ackCount = 0;
             int nackCount = 0;
 
-            List<Msg> snapshot = new ArrayList<>(receivedPhase2Messages);
+            int mmajority = (n/2)+1;
+            while(receivedPhase3Replies.size() < mmajority)
+            {
+                try {
+                    Thread.sleep(100);
+                }
+                catch(InterruptedException e)
+                {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            List<Msg> snapshot = new ArrayList<>(receivedPhase3Replies);
             for (Msg m : snapshot) {
 
                 if (m.getSrcId() != coordinatorId) {
@@ -402,7 +447,6 @@ public class ConsensusProcess extends Process{
         while(state == 0){
             receivedPhase1Messages.clear();
             receivedPhase2Messages.clear();
-            receivedPhase3Replies.clear();
             round++;
             int coordinatorId = (round%n);
             
