@@ -1,0 +1,512 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+% --- minimalni, cist stil ---
+\usetheme{default}
+\usecolortheme{dove}
+\usefonttheme{professionalfonts}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{blocks}[rounded][shadow=false]
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+% oznake klasa detektora
+\newcommand{\Dp}{\ensuremath{\mathcal{P}}}
+\newcommand{\Ds}{\ensuremath{\mathcal{S}}}
+\newcommand{\Dw}{\ensuremath{\mathcal{W}}}
+\newcommand{\Dv}{\ensuremath{\mathcal{V}}}
+\newcommand{\eP}{\ensuremath{\Diamond\mathcal{P}}}
+\newcommand{\eS}{\ensuremath{\Diamond\mathcal{S}}}
+\newcommand{\eW}{\ensuremath{\Diamond\mathcal{W}}}
+\newcommand{\eV}{\ensuremath{\Diamond\mathcal{V}}}
+\newcommand{\Crashed}{\mathrm{Crashed}}
+\newcommand{\Up}{\mathrm{Up}}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{gray!60!black},
+  frame=single,breaklines=true,
+  showstringspaces=false,
+  language=Java,
+  literate={č}{{\v{c}}}1 {ć}{{\'c}}1 {ž}{{\v{z}}}1 {š}{{\v{s}}}1 {đ}{{\dj}}1
+           {Č}{{\v{C}}}1 {Ć}{{\'C}}1 {Ž}{{\v{Z}}}1 {Š}{{\v{S}}}1 {Đ}{{\DJ}}1
+}
+
+\title{Otkrivači grešaka u distribuiranim sustavima}
+\author{Bartol Gracin \and Vid Joha \and Matija Njegač}
+\institute{Distribuirani procesi}
+\date{}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Pregled}
+  \begin{enumerate}
+    \item Motivacija: asinkroni sustavi i nemogućnost konsenzusa
+    \item Otkrivači grešaka: potpunost i točnost
+    \item Osam klasa i reducibilnost
+    \item Konsenzus pomoću otkrivača (\Ds{} i \eS)
+    \item Implementacije:
+      \begin{itemize}
+        \item Algoritam 15.3 --- konsenzus uz \Ds
+        \item Algoritam 15.4 --- konsenzus uz \eS
+        \item Algoritam 15.7 --- otkrivač \eP
+      \end{itemize}
+  \end{enumerate}
+\end{frame}
+
+% =======================  TEORIJA  =======================
+
+\section{Teorija}
+
+\begin{frame}{Motivacija}
+  \begin{itemize}
+    \item \textbf{Asinkroni model:} nema gornje granice na trajanje koraka ni na
+      kašnjenje poruke.
+    \item Proces može zakazati \emph{zaustavljanjem} (crash) --- trajno stane.
+    \item Problem: ne razlikujemo \emph{srušen} proces od \emph{sporog}.
+    \item \textbf{FLP:} u asinkronom sustavu konsenzus je nemoguć već uz jedan kvar.
+  \end{itemize}
+  \vfill
+  \begin{block}{Rješenje}
+    Sustavu dodajemo \emph{otkrivač grešaka} --- orakl koji daje (nepouzdane)
+    naznake o tome tko se srušio. Time konsenzus postaje rješiv.
+  \end{block}
+\end{frame}
+
+\begin{frame}{Otkrivači grešaka}
+  \begin{itemize}
+    \item Svaki proces $p_i$ ima lokalni modul $D_i$ koji prati ostale procese.
+    \item $D_p(t)$ = skup procesa za koje $p$ u trenutku $t$ sumnja da su se
+      srušili.
+    \item Sumnja se temelji na tome koliko dugo nismo čuli neki proces.
+    \item \textbf{Nepouzdani su:} ispravan proces može biti osumnjičen, pa kasnije
+      maknut s popisa.
+  \end{itemize}
+  \vfill
+  Kvalitetu opisujemo dvama svojstvima: \textbf{potpunost} i \textbf{točnost}.
+\end{frame}
+
+\begin{frame}{Potpunost}
+  Kada otkrivač \emph{mora} posumnjati na srušeni proces.
+  \begin{block}{Jaka potpunost}
+    Nakon nekog trenutka svaki srušeni proces trajno je sumnjiv \emph{svakom}
+    ispravnom procesu.
+  \end{block}
+  \begin{block}{Slaba potpunost}
+    Nakon nekog trenutka svaki srušeni proces trajno je sumnjiv \emph{nekom}
+    ispravnom procesu.
+  \end{block}
+  \vfill
+  \footnotesize Sama potpunost nije dovoljna (detektor koji sumnja na sve
+  zadovoljava jaku potpunost, a beskoristan je).
+\end{frame}
+
+\begin{frame}{Točnost}
+  Kada otkrivač \emph{smije} pogriješiti (posumnjati na ispravan proces).
+  \begin{itemize}
+    \item \textbf{Jaka:} nijedan ispravan proces nikada nije sumnjiv.
+    \item \textbf{Slaba:} neki ispravan proces nikada nije sumnjiv.
+    \item \textbf{Konačna jaka:} postoji trenutak nakon kojeg nijedan ispravan
+      proces nije sumnjiv.
+    \item \textbf{Konačna slaba:} postoji trenutak nakon kojeg neki ispravan
+      proces nije sumnjiv.
+  \end{itemize}
+  \vfill
+  \footnotesize ,,Konačna'' varijanta dopušta rane greške, ali zahtijeva da one
+  \emph{prestanu}.
+\end{frame}
+
+\begin{frame}{Osam klasa otkrivača}
+  \centering
+  \small
+  \begin{tabular}{lllc}
+    \toprule
+    Klasa & Potpunost & Točnost & Oznaka \\
+    \midrule
+    Savršeni             & jaka  & jaka          & \Dp \\
+    Konačno savršeni     & jaka  & konačna jaka  & \eP \\
+    Jaki                 & jaka  & slaba         & \Ds \\
+    Konačno jaki         & jaka  & konačna slaba & \eS \\
+    Slabi                & slaba & slaba         & \Dw \\
+    Konačno slabi        & slaba & konačna slaba & \eW \\
+    Slaba potpunost i jaka točnost                  & slaba & jaka          & \Dv \\
+    Slaba potpunost i konačna jaka točnost                  & slaba & konačna jaka  & \eV \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+\begin{frame}{Reducibilnost}
+  Transformacijom slabe potpunosti u jaku dobivamo ekvivalencije:
+  \[
+    \Dp \equiv \Dv,\quad \Ds \equiv \Dw,\quad \eP \equiv \eV,\quad \eS \equiv \eW.
+  \]
+  \vfill
+  \centering
+  \begin{tikzpicture}[>=Latex, node distance=10mm and 20mm, every node/.style={font=\small}]
+    \node (P) {$\Dp \equiv \Dv$};
+    \node (eP) [below left=of P] {$\eP \equiv \eV$};
+    \node (S) [below right=of P] {$\Ds \equiv \Dw$};
+    \node (eS) [below right=of eP] {$\eS \equiv \eW$};
+    \draw[->] (P) -- (eP); \draw[->] (P) -- (S);
+    \draw[->] (eP) -- (eS); \draw[->] (S) -- (eS);
+  \end{tikzpicture}
+  \vfill
+  \footnotesize Za konsenzus je dovoljno riješiti dvije klase: \Ds{} i \eS.
+\end{frame}
+
+\begin{frame}{Konsenzus pomoću otkrivača}
+  Svaki proces predlaže vrijednost; traži se \emph{konačnost}, \emph{usuglašenost}
+  i \emph{valjanost}.
+  \vfill
+  \begin{block}{Uz \Ds{} (jaki)}
+    Konsenzus rješiv \textbf{bez ograničenja na broj kvarova} (do $n-1$). \\
+    $\Rightarrow$ Algoritam 15.3.
+  \end{block}
+  \begin{block}{Uz \eS{} (konačno jaki)}
+    Konsenzus rješiv \textbf{samo ako je većina ispravna} ($f < n/2$). \\
+    $\Rightarrow$ Algoritam 15.4.
+  \end{block}
+  \vfill
+  \footnotesize \eS{} je najslabiji otkrivač koji uopće rješava konsenzus; u praksi
+  gradimo barem \eP{} (Algoritam 15.7).
+\end{frame}
+
+% =======================  ALGORITAM 15.3  =======================
+
+\section{Algoritam 15.3}
+
+\begin{frame}{Algoritam 15.3 --- konsenzus uz \Ds}
+  \textbf{Ideja.} Konsenzus koji podnosi \textbf{bilo koji broj kvarova} (do
+  $n-1$) i ne treba većinu; radi u tri faze.
+  \begin{itemize}
+    \item Svaki proces drži vektor $V_p$ --- svoje procjene vrijednosti koje su
+      predložili svi procesi (na početku prazne, osim vlastite).
+    \item $\Delta_p$ sadrži vrijednosti naučene u zadnjoj rundi.
+    \item Upit ,,$q \in D_p$'' (koga sumnjičimo) ostvaruje ugrađeni heartbeat
+      detektor, poruke ,,Alive''.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Algoritam 15.3 --- opis}
+  \begin{itemize}
+    \item \textbf{Faza 1} ($n-1$ rundi). U svakoj rundi proces svima pošalje
+      vrijednosti koje je zadnje naučio i čeka poruku te runde od svakog procesa
+      kojeg \emph{ne} sumnjiči --- osumnjičene preskače. Svaku novu vrijednost
+      upiše u $V_p$. Nakon $n-1$ rundi svi ispravni imaju isti skup
+      ,,preživjelih'' vrijednosti.
+    \item \textbf{Faza 2.} Procesi razmijene cijele vektore. Ako je bilo koji
+      primljeni vektor imao prazno mjesto, i vlastito se mjesto isprazni --- tako
+      ispadaju vrijednosti oko kojih nema potpune sloge. Barem jedno mjesto
+      ostaje popunjeno.
+    \item \textbf{Faza 3.} Svi odluče \emph{prvu} popunjenu vrijednost vektora;
+      ona je ista kod svih.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile,allowframebreaks]{Algoritam 15.3 --- kod}
+\begin{lstlisting}
+for(int runda=1; runda < numProc; runda++){
+    // Faza 1: posalji svoju Deltu svima
+    for (int j = 0; j < numProc; j++)
+        if (j != myId) process.sendMsg(j,"Consensus",runda,process.getDelta());
+
+    // cekaj dok ne primis od svih ili ih ne osumnjicis (upit detektoru)
+    do {
+        for (int j = 0; j < numProc; j++)
+            if (j != myId){ process.sendMsg(j,"Alive",runda,process.getDelta());
+                            process.provjeriProces(j); }
+        Thread.sleep(1000);
+    } while(process.kolikoSamPorukaPrimioURundi(runda)
+            + process.kolikoJeProcesaOsumnjiceno() < numProc-1);
+
+    process.obradiPoruke(runda);   // spoji primljene vrijednosti u V
+    process.novaRunda();
+}
+\end{lstlisting}
+
+\begin{lstlisting}
+// Faza 1: za svako mjesto i koje je jos null, uzmi vrijednost iz poruke
+public void obradiPoruke(int runda){
+    for (int i = 0; i < numProc; i++) Delta.set(i, null);
+    for (int i = 0; i < numProc; i++){
+        if(V.get(i)==null){
+            for(int j = 0; j < Poruke.get(runda-1).size(); j++){
+                String[] t = Poruke.get(runda-1).get(j).getMessage().trim().split("\\s+");
+                Integer val = t[i+1].equals("null") ? null : Integer.parseInt(t[i+1]);
+                if(val!=null){ V.set(i,val); Delta.set(i,val); }
+            }
+        }
+    }
+}
+
+// Faza 2: ako je neki primljeni V_q imao null na mjestu i, i mi ga ponistimo
+public void provjeriZadnjePoruke(int proces){
+    for(int i = 0; i<ZadnjePoruke.size(); i++){
+        if(ZadnjePoruke.get(i).getSrcId()==proces){
+            String[] t = ZadnjePoruke.get(i).getMessage().trim().split("\\s+");
+            Integer val = t[i+1].equals("null") ? null : Integer.parseInt(t[i+1]);
+            if(val==null) V.set(i, null);
+        }
+    }
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Algoritam 15.3 --- zašto radi}
+  \begin{itemize}
+    \item \textbf{Otpornost:} nijedna faza ne traži većinu --- čeka se svaki
+      neosumnjičeni proces, osumnjičeni se preskaču.
+    \item \textbf{Usuglašenost:} slaba točnost \Ds{} jamči ispravan proces
+      $p^\ast$ kojeg nitko ne sumnjiči; njegova vrijednost preživi u svim
+      vektorima $\Rightarrow$ svi odluče isto.
+    \item \textbf{Konačnost:} jaka potpunost $\Rightarrow$ srušeni se na kraju
+      osumnjiče, pa čekanje ne blokira zauvijek.
+  \end{itemize}
+\end{frame}
+
+% =======================  ALGORITAM 15.4  =======================
+
+\section{Algoritam 15.4}
+
+\begin{frame}{Algoritam 15.4 --- konsenzus uz \eS}
+  \textbf{Ideja.} Konsenzus \emph{rotirajućim koordinatorom}: u rundi $r$
+  koordinator je $c=(r \bmod n)+1$, i sve poruke idu prema koordinatoru ili od
+  njega.
+  \begin{itemize}
+    \item Traži \textbf{ispravnu većinu} procesa ($f < n/2$).
+    \item Svaki proces pamti procjenu odluke $estimate_p$ i vremensku oznaku
+      $ts_p$ (rundu u kojoj je procjenu zadnji put promijenio).
+    \item Sumnju na koordinatora daje otkrivač \eS.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Algoritam 15.4 --- opis}
+  U svakoj rundi koordinator pokušava ,,zaključati'' zajedničku vrijednost kroz
+  četiri faze:
+  \begin{itemize}
+    \item \textbf{Faza 1.} Svi procesi pošalju koordinatoru svoju procjenu i
+      oznaku $(estimate_p, ts_p)$.
+    \item \textbf{Faza 2.} Koordinator pričeka procjene od većine, odabere
+      najsvježiju (najveća oznaka $ts$) i pošalje je svima kao prijedlog.
+    \item \textbf{Faza 3.} Tko primi prijedlog, prihvati ga i odgovori
+      \emph{ack}; tko posumnja na koordinatora, odgovori \emph{nack}.
+    \item \textbf{Faza 4.} Dobije li koordinator \emph{ack} od većine, vrijednost
+      je zaključana i emitira \emph{decide}; svi koji ga prime odluče tu
+      vrijednost.
+  \end{itemize}
+  \vfill
+  \footnotesize Sruši li se koordinator ili je osumnjičen, kreće iduća runda s
+  novim koordinatorom.
+\end{frame}
+
+\begin{frame}[fragile,allowframebreaks]{Algoritam 15.4 --- kod}
+\begin{lstlisting}
+public void runConsensus(){
+    while(state == 0){
+        receivedPhase1Messages.clear();
+        receivedPhase2Messages.clear();
+        round++;
+        int coordinatorId = (round%n);
+        phase1_sendEstimate(coordinatorId);
+        phase2_coordinatorSelect(coordinatorId);
+        phase3_ackNack(coordinatorId);
+        phase4_decide(coordinatorId);
+        try { Thread.sleep(1000); } catch (InterruptedException e) {}
+    }
+    System.out.println("FINAL DECISION = " + estimate);
+}
+\end{lstlisting}
+
+\begin{lstlisting}
+public void phase1_sendEstimate(int coordinatorId) {
+    String payload = estimate + " " + estimateRound;   // estimate + timestamp
+    if (coordinatorId != myId)
+        linker.sendMsg(coordinatorId, "PHASE1", payload);
+}
+
+public void phase2_coordinatorSelect(int coordinatorId) {
+    if (myId != coordinatorId) return;          // samo koordinator
+    int bestEstimate = estimate, bestRound = estimateRound;
+    int majority = (n/2) + 1;
+    while(receivedPhase1Messages.size() < majority-1)
+        try { Thread.sleep(100); } catch (InterruptedException e){ break; }
+    for (Msg m : new ArrayList<>(receivedPhase1Messages)) {
+        String[] parts = m.getMessage().trim().split("\\s+");
+        int value = Integer.parseInt(parts[0]), ts = Integer.parseInt(parts[1]);
+        if (ts > bestRound) { bestRound = ts; bestEstimate = value; }  // najsvjeziji
+    }
+    estimate = bestEstimate; estimateRound = round;
+    linker.broadcastToAll("PHASE2", estimate + " " + estimateRound);
+    receivedPhase2Messages.add(new Msg(myId, myId, "PHASE2", estimate+" "+estimateRound));
+}
+\end{lstlisting}
+
+\begin{lstlisting}
+public void phase3_ackNack(int coordinatorId) {
+    Msg coordinatorMsg = null;
+    while(receivedPhase2Messages.isEmpty())
+        try { Thread.sleep(100); } catch(InterruptedException e){}
+    for (Msg m : new ArrayList<>(receivedPhase2Messages)) {
+        if (m.getSrcId()==coordinatorId && m.getDestId()==myId) {
+            coordinatorMsg = m;
+            String[] parts = m.getMessage().trim().split("\\s+");
+            estimate = Integer.parseInt(parts[0]); estimateRound = round;  // prihvati
+            break;
+        }
+    }
+    if (coordinatorMsg != null || coordinatorId == myId) {   // ACK
+        if (coordinatorId != myId) linker.sendMsg(coordinatorId, "ACK", round + "");
+        else receivedPhase3Replies.add(new Msg(myId, myId, "ACK", round + ""));
+    } else {                                                 // NACK
+        if (coordinatorId != myId) linker.sendMsg(coordinatorId, "NACK", round + "");
+    }
+}
+
+public void phase4_decide(int coordinatorId) {
+    if (myId != coordinatorId) return;         // samo koordinator odlucuje
+    int ackCount = 0, majority = (n/2) + 1;
+    while(receivedPhase3Replies.size() < majority)
+        try { Thread.sleep(100); } catch(InterruptedException e){}
+    for (Msg m : new ArrayList<>(receivedPhase3Replies))
+        if (m.getSrcId()!=coordinatorId && m.getTag().equals("ACK")) ackCount++;
+    if (ackCount >= majority) {                 // vecina prihvatila -> DECIDE
+        linker.broadcastToAll("DECIDE", estimate + " " + round);
+        state = 1;
+    }
+    receivedPhase3Replies.clear();
+}
+\end{lstlisting}
+
+\begin{lstlisting}
+// obrada odluke u handleMsg
+else if (tag.equals("DECIDE")) {
+    String[] parts = m.getMessage().trim().split("\\s+");
+    estimate = Integer.parseInt(parts[0]);
+    state = 1;
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Algoritam 15.4 --- zašto radi}
+  \begin{itemize}
+    \item \textbf{Zašto većina:} faze 2 i 4 čekaju $\lceil(n{+}1)/2\rceil$
+      odgovora; dvije se većine uvijek preklapaju $\Rightarrow$ zaključana
+      vrijednost prenosi se u sve kasnije runde (usuglašenost).
+    \item Bez ispravne većine čekanje bi moglo blokirati $\Rightarrow$ uvjet
+      $f<n/2$.
+    \item \textbf{Konačnost:} konačna slaba točnost \eS{} $\Rightarrow$ na kraju
+      postoji ispravan, neosumnjičen koordinator koji zaključa vrijednost i
+      emitira \textit{decide}.
+  \end{itemize}
+\end{frame}
+
+% =======================  ALGORITAM 15.7  =======================
+
+\section{Algoritam 15.7}
+
+\begin{frame}{Algoritam 15.7 --- otkrivač \eP}
+  \textbf{Ideja.} Savršen otkrivač \Dp{} nije ostvariv u asinkronom sustavu;
+  najbolje što možemo jest da greške \emph{na kraju} prestanu --- to je \eP.
+  \begin{itemize}
+    \item Radi u \emph{parcijalnoj sinkroniji} (nakon nepoznatog trenutka sustav
+      postane sinkron).
+    \item Vrijeme se mjeri lokalnim satom (otkucaji), ne stvarnim satom.
+    \item Ključ: \textbf{adaptivni timeout} $\Delta_p(q)$ koji raste nakon svake
+      pogrešne sumnje.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Algoritam 15.7 --- opis (tri zadatka)}
+  Tri paralelna zadatka; vrijeme mjeri lokalni sat koji broji otkucaje.
+  \begin{itemize}
+    \item \textbf{Zadatak 1 (heartbeat).} Proces periodički svima šalje poruku
+      ,,živ sam''.
+    \item \textbf{Zadatak 2 (timeout).} Ako od procesa $q$ nije čuo ništa dulje od
+      $\Delta_p(q)$ otkucaja, doda ga među sumnjive.
+    \item \textbf{Zadatak 3 (kajanje).} Primi li poruku od procesa kojeg
+      sumnjiči, makne ga s popisa i \emph{poveća} $\Delta_p(q)$ za jedan.
+  \end{itemize}
+  \vfill
+  \footnotesize Timeout se sam prilagođava: raste dok ne prijeđe stvarno
+  kašnjenje, nakon čega lažne sumnje prestaju.
+\end{frame}
+
+\begin{frame}[fragile,allowframebreaks]{Algoritam 15.7 --- kod}
+\begin{lstlisting}
+// Zadatak 1: posalji "ziv sam" svima
+public void sendHeartbeats() {
+    if (crashed) return;
+    broadcastMsg("alive", (int) clock);
+}
+
+// Zadatak 2: istek vremena -> sumnja
+public synchronized void checkTimeouts() {
+    for (int q = 0; q < N; q++) {
+        if (q == myId) continue;
+        if (!Output.contains(q) && (clock - lastAlive[q]) > delta[q]) {
+            Output.add(q);
+        }
+    }
+}
+
+// Zadatak 3: kad primim "ziv sam" od q -> kajanje + veci timeout
+public synchronized void handleMsg(Msg m, int q, String tag) {
+    if (tag.equals("alive")) {
+        lastAlive[q] = clock;
+        if (Output.contains(q)) {
+            Output.remove(q);
+            delta[q] = delta[q] + 1;
+        }
+    }
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Algoritam 15.7 --- ispravnost i test}
+  \textbf{Jaka potpunost.} Srušeni proces prestaje slati; tišina raste iznad
+  $\Delta_p(q)$ $\Rightarrow$ trajno osumnjičen.
+
+  \textbf{Konačna jaka točnost.} Nakon sinkronosti $\Delta$ prerasta stvarno
+  kašnjenje $\Rightarrow$ pogrešne sumnje prestaju.
+  \vfill
+  \centering
+  \small
+  \begin{tabular}{ll}
+    \toprule
+    Scenarij & Rezultat \\
+    \midrule
+    kvar $p_2$ (t=10)        & svi trajno sumnjaju na $p_2$; potpunost \\
+    spor $p_2$ (svakih 8)    & $\Delta$: $5{\to}6{\to}7{\to}8$, sumnje prestanu; točnost \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+% =======================  ZAKLJUCAK  =======================
+
+\begin{frame}{Zaključak}
+  \begin{itemize}
+    \item Otkrivači se opisuju \textbf{potpunošću} i \textbf{točnošću} $\Rightarrow$
+      osam klasa.
+    \item Zbog reducibilnosti za konsenzus su bitne \Ds{} i \eS.
+    \item \textbf{15.3} (\Ds): konsenzus uz bilo koji broj kvarova.
+    \item \textbf{15.4} (\eS): konsenzus uz ispravnu većinu (rotirajući koordinator).
+    \item \textbf{15.7} (\eP): ostvariv otkrivač u parcijalnoj sinkroniji
+      (adaptivni timeout).
+  \end{itemize}
+  \vfill
+  \centering \emph{Hvala na pažnji!}
+\end{frame}
+
+\end{document}

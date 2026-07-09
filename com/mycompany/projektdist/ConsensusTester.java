@@ -250,9 +250,9 @@ public class ConsensusTester {
             //Ovo su dva algoritma koja implementiramo. 
             //Odkomentiraj kojeg želiš testirati.
             
-            //Consensus15_3(process,numProc);
+            Consensus15_3(process,numProc);
 
-            process.runConsensus();
+            //process.runConsensus();
         }
         
             catch (Exception e) {

@@ -1,0 +1,4 @@
+\beamer@sectionintoc {1}{Teorija}{3}{0}{1}
+\beamer@sectionintoc {2}{Algoritam 15.3}{10}{0}{2}
+\beamer@sectionintoc {3}{Algoritam 15.4}{16}{0}{3}
+\beamer@sectionintoc {4}{Algoritam 15.7}{24}{0}{4}

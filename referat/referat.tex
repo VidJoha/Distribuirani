@@ -256,7 +256,8 @@ rezultata određuju granicu otpornosti:
   \item \textbf{Uz \eS{}} konsenzus se rješava samo ako je većina procesa
   ispravna ($f < n/2$). Algoritam~15.4 koristi rotirajućeg koordinatora: u svakoj
   rundi jedan proces prikuplja procjene većine i predlaže novu vrijednost, a
-  uvjet većine sprječava da se odluke različitih rundi raziđu.
+  uvjet većine sprječava da se odluke različitih rundi raziđu. I ovaj smo
+  algoritam implementirali; opisujemo ga u poglavlju~\ref{sec:kons-es}.
 \end{itemize}
 
 Poanta je razlika u otpornosti: jaka (trajna) točnost klase $\Ds$ dovoljna je za
@@ -468,6 +469,287 @@ odluče jednako.
 
 \paragraph{Završetak.} Jaka potpunost detektora jamči da se srušeni procesi na
 kraju osumnjiče, pa čekanje u fazama nikada ne blokira zauvijek.
+
+\section{Implementacija konsenzusa uz konačno jaki detektor \eS{} (Algoritam 15.4)}
+\label{sec:kons-es}
+
+U istom razredu \texttt{ConsensusProcess} implementiran je i konsenzus uz konačno
+jaki detektor $D \in \eS$ (metode \texttt{runConsensus} i \texttt{phase1}--\texttt{phase4}).
+Za razliku od Algoritma~15.3, ovaj traži da je \emph{većina procesa ispravna}
+($f < n/2$). Algoritam koristi \emph{rotirajućeg koordinatora}: u rundi $r$
+koordinator je proces $c = (r \bmod n) + 1$, i sve poruke idu prema koordinatoru
+ili od njega. Svaki proces drži procjenu odluke $estimate_p$ i vremensku oznaku
+$ts_p$ (broj runde u kojoj je procjena zadnji put promijenjena).
+
+\begin{algorithm}[H]
+\caption{Konsenzus uz konačno jaki detektor $D \in \eS$ (rotirajući koordinator,
+na procesu $p$)}
+\label{alg:eS}
+\begin{algorithmic}[1]
+\State $estimate_p \gets v_p$;\ \ $state_p \gets$ undecided;\ \ $r_p \gets 0$;\ \ $ts_p \gets 0$
+\Statex \textbf{cobegin}
+\Statex \textbf{Zadatak 1:} \textbf{dok} $state_p =$ undecided
+  \State \quad $r_p \gets r_p + 1$;\quad $c_p \gets (r_p \bmod n) + 1$
+  \Comment{koordinator runde}
+  \Statex \quad \textbf{Faza 1:} $p$ šalje $(p, r_p, estimate_p, ts_p)$ koordinatoru $c_p$
+  \Statex \quad \textbf{Faza 2:} \textbf{ako} $p = c_p$
+    \State \qquad čekaj dok ne primiš procjene od $\lceil (n{+}1)/2 \rceil$ procesa
+    \State \qquad $t \gets$ najveći $ts_q$ među primljenima
+    \State \qquad $estimate_p \gets$ neki $estimate_q$ s tim $t$; pošalji
+    $(p, r_p, estimate_p)$ svima
+  \Statex \quad \textbf{Faza 3:} čekaj dok ne primiš $(c_p, r_p, estimate_{c_p})$
+  \textbf{ili} $c_p \in D_p$
+    \State \qquad \textbf{ako} primljeno: $estimate_p \gets estimate_{c_p}$;
+    $ts_p \gets r_p$; pošalji \textit{ack}
+    \State \qquad \textbf{inače} pošalji \textit{nack} \Comment{sumnja na koordinatora}
+  \Statex \quad \textbf{Faza 4:} \textbf{ako} $p = c_p$
+    \State \qquad čekaj $\lceil (n{+}1)/2 \rceil$ odgovora; \textbf{ako} su svi
+    \textit{ack}: R-broadcast $(p, r_p, estimate_p, \textit{decide})$
+\Statex \textbf{Zadatak 2:} kad primiš $(q, r_q, estimate_q, \textit{decide})$
+  \State \quad \textbf{ako} $state_p =$ undecided: odluči $estimate_q$;
+  $state_p \gets$ decided
+\Statex \textbf{coend}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Opis četiriju faza}
+
+\begin{description}
+  \item[Faza 1.] Svaki proces šalje koordinatoru svoju trenutnu procjenu i
+  vremensku oznaku $(estimate_p, ts_p)$.
+  \item[Faza 2.] Koordinator čeka procjene od većine procesa, odabere onu s
+  najvećom vremenskom oznakom (najsvježiju) i emitira je svima kao novu procjenu.
+  \item[Faza 3.] Svaki proces čeka novu procjenu koordinatora. Ako je primi,
+  prihvati je i pošalje \textit{ack}; ako posumnja na koordinatora (upit
+  detektoru $D_p$), pošalje \textit{nack}.
+  \item[Faza 4.] Koordinator čeka odgovore većine. Ako je većina poslala
+  \textit{ack}, vrijednost je ,,zaključana'' i koordinator emitira zahtjev za
+  odluku (\textit{decide}). Svaki proces koji primi \textit{decide} odlučuje tu
+  vrijednost.
+\end{description}
+
+Uvjet većine ($f < n/2$) je nužan: dvije faze čekaju odgovore od $\lceil
+(n{+}1)/2 \rceil$ procesa, pa se presjek bilo koje dvije većine preklapa u barem
+jednom procesu, čime se sprječava da odluke različitih rundi budu proturječne.
+(U kodu su procesi indeksirani od 0, pa je koordinator $r \bmod n$.)
+
+\subsection{Implementacija u Javi}
+
+Glavna petlja rotira koordinatore dok se ne odluči (metoda \texttt{runConsensus}):
+
+\begin{lstlisting}
+    public void runConsensus(){
+
+        System.out.println("P" + myId + " estimate = " + estimate);
+        while(state == 0){
+            receivedPhase1Messages.clear();
+            receivedPhase2Messages.clear();
+            round++;
+            int coordinatorId = (round%n);
+
+
+            System.out.println("Round " + round + " coordinator = " + coordinatorId);
+
+        phase1_sendEstimate(coordinatorId);
+        phase2_coordinatorSelect(coordinatorId);
+        phase3_ackNack(coordinatorId);
+        phase4_decide(coordinatorId);
+
+        try {
+            Thread.sleep(1000); // mali delay da vidiš roundove
+        } catch (InterruptedException e) {}
+    }
+
+    System.out.println("FINAL DECISION = " + estimate);
+    }
+\end{lstlisting}
+
+Faza 1 i Faza 2 (koordinator skuplja većinu i bira procjenu s najvećom oznakom):
+
+\begin{lstlisting}
+    public void phase1_sendEstimate(int coordinatorId) {
+
+        // pakiramo estimate + timestamp (estimateRound)
+        String payload = estimate + " " + estimateRound;
+        if (coordinatorId != myId)
+            linker.sendMsg(coordinatorId, "PHASE1", payload);
+
+        System.out.println("P" + myId +
+            " -> PHASE1 sent to " + coordinatorId +
+            " value=" + estimate +
+            " ts=" + estimateRound);
+    }
+
+    public void phase2_coordinatorSelect(int coordinatorId) {
+            // samo koordinator radi Phase 2
+        if (myId != coordinatorId) return;
+
+        System.out.println("P" + myId + " je coordinator u rundi " + round);
+
+        int bestEstimate = estimate;
+        int bestRound = estimateRound;
+        int majority = (n/2) +1;
+        while(receivedPhase1Messages.size() < majority-1)
+            {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        List<Msg> snapshot = new ArrayList<>(receivedPhase1Messages);
+        for (Msg m : snapshot) {
+
+            String[] parts = m.getMessage().trim().split("\\s+");
+
+            int value = Integer.parseInt(parts[0]);
+            int ts = Integer.parseInt(parts[1]);
+
+            if (ts > bestRound) {
+                bestRound = ts;
+                bestEstimate = value;
+            }
+        }
+
+        // update coordinator state
+        estimate = bestEstimate;
+        estimateRound = round;
+
+        System.out.println("Coordinator picked: " + estimate);
+
+        // šalje svima novu vrijednost
+        String payload = estimate + " " + estimateRound;
+
+        linker.broadcastToAll("PHASE2", payload);
+
+        Msg self = new Msg(myId, myId, "PHASE2",payload);
+
+        receivedPhase2Messages.add(self);
+    }
+\end{lstlisting}
+
+Faza 3 (prihvat procjene i slanje ack/nack) i Faza 4 (odluka koordinatora na
+temelju većine ack-ova):
+
+\begin{lstlisting}
+    public void phase3_ackNack(int coordinatorId) {
+
+        Msg coordinatorMsg = null;
+
+        while(receivedPhase2Messages.isEmpty())
+        {
+            try {
+                Thread.sleep(100);
+            }
+            catch(InterruptedException e)
+            {
+                Thread.currentThread().interrupt();
+            }
+        }
+        // tražimo PHASE2 poruku od koordinatora
+        List<Msg> snapshot = new ArrayList<>(receivedPhase2Messages);
+        for (Msg m : snapshot) {
+
+            if (m.getSrcId() == coordinatorId && m.getDestId() == myId) {
+
+                coordinatorMsg = m;
+
+                String[] parts = m.getMessage().trim().split("\\s+");
+
+                int value = Integer.parseInt(parts[0]);
+                int valueRound = Integer.parseInt(parts[1]);
+
+                // prihvati vrijednost
+                estimate = value;
+                estimateRound = round;
+
+                System.out.println("P" + myId +
+                    " ACCEPT PHASE2 from " + coordinatorId +
+                    " value=" + estimate);
+
+                break;
+            }
+        }
+
+        // ako smo dobili poruku -> ACK
+        if (coordinatorMsg != null || coordinatorId == myId) {
+            if (coordinatorId != myId)
+                linker.sendMsg(coordinatorId, "ACK", round + "");
+            else
+                receivedPhase3Replies.add(new Msg(myId, myId, "ACK", round + ""));
+
+            System.out.println("P" + myId + " -> ACK to " + coordinatorId);
+        }
+        // ako nismo dobili -> NACK
+        else {
+            if (coordinatorId != myId)
+                linker.sendMsg(coordinatorId, "NACK", round + "");
+
+            System.out.println("P" + myId + " -> NACK to " + coordinatorId);
+        }
+    }
+
+    public void phase4_decide(int coordinatorId) {
+
+        // samo koordinator odlučuje
+        if (myId != coordinatorId) return;
+
+            int ackCount = 0;
+            int nackCount = 0;
+
+            int mmajority = (n/2)+1;
+            while(receivedPhase3Replies.size() < mmajority)
+            {
+                try { Thread.sleep(100); }
+                catch(InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+            List<Msg> snapshot = new ArrayList<>(receivedPhase3Replies);
+            for (Msg m : snapshot) {
+                if (m.getSrcId() != coordinatorId) {
+                    if (m.getTag().equals("ACK"))       ackCount++;
+                    else if (m.getTag().equals("NACK")) nackCount++;
+                }
+            }
+
+            System.out.println("P" + myId + " ACK=" + ackCount + " NACK=" + nackCount);
+
+            // majority rule
+            int majority = (n / 2) + 1;
+            if (ackCount >= majority) {
+                System.out.println("P" + myId + " DECIDES value = " + estimate);
+                linker.broadcastToAll("DECIDE", estimate + " " + round);
+                state = 1; // decided
+            }
+            receivedPhase3Replies.clear();
+        }
+\end{lstlisting}
+
+Odluka se prima u \texttt{handleMsg} (Zadatak 2 iz pseudokoda):
+
+\begin{lstlisting}
+            else if (tag.equals("DECIDE")) {
+                receivedDecideMessages.add(m);
+                String[] parts = m.getMessage().trim().split("\\s+");
+                estimate = Integer.parseInt(parts[0]);
+                state = 1;
+                System.out.println("P" + myId +
+                    " received DECIDE from " + src + " value=" + estimate);
+            }
+\end{lstlisting}
+
+\subsection{Dokaz ispravnosti}
+
+\paragraph{Potreba za većinom.} Faze 2 i 4 čekaju odgovore od $\lceil (n{+}1)/2
+\rceil$ procesa. Dvije se većine uvijek preklapaju u barem jednom procesu, pa se
+jednom ,,zaključana'' vrijednost prenosi u sve kasnije runde i nikoja dva procesa
+ne mogu odlučiti različito (usuglašenost). Ako većina nije ispravna, čekanje bi
+moglo blokirati zauvijek, pa algoritam zahtijeva $f < n/2$.
+
+\paragraph{Završetak.} Konačna slaba točnost detektora $\eS$ jamči da nakon nekog
+vremena postoji ispravan koordinator kojeg nitko ne sumnjiči. Kad on dođe na red,
+njegovu procjenu svi prihvate (\textit{ack}), vrijednost se zaključa i emitira
+\textit{decide}, pa svi ispravni procesi odluče.
 
 \section{Implementacija otkrivača \eP{} (Algoritam 15.7)}
 \label{sec:fd}

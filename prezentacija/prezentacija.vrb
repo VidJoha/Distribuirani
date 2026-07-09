@@ -1,0 +1,29 @@
+\frametitle{Algoritam 15.7 --- kod}
+\begin{lstlisting}
+// Zadatak 1: posalji "ziv sam" svima
+public void sendHeartbeats() {
+    if (crashed) return;
+    broadcastMsg("alive", (int) clock);
+}
+
+// Zadatak 2: istek vremena -> sumnja
+public synchronized void checkTimeouts() {
+    for (int q = 0; q < N; q++) {
+        if (q == myId) continue;
+        if (!Output.contains(q) && (clock - lastAlive[q]) > delta[q]) {
+            Output.add(q);
+        }
+    }
+}
+
+// Zadatak 3: kad primim "ziv sam" od q -> kajanje + veci timeout
+public synchronized void handleMsg(Msg m, int q, String tag) {
+    if (tag.equals("alive")) {
+        lastAlive[q] = clock;
+        if (Output.contains(q)) {
+            Output.remove(q);
+            delta[q] = delta[q] + 1;
+        }
+    }
+}
+\end{lstlisting}
