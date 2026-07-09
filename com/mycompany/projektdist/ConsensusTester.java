@@ -142,6 +142,94 @@ public class ConsensusTester {
     }
 
 
+    public static void Consensus15_3(ConsensusProcess process, int numProc) throws Exception {
+
+        for(int runda = 1; runda < numProc; runda++){
+            System.out.println("--------------------------");
+            System.out.println("Započeta " + runda + ". runda");
+
+            for (int j = 0; j < numProc; j++){
+                if (j != process.myId){
+                    process.sendMsg(j, "Consensus", runda, process.getDelta());
+                    kvar();
+                }
+            }
+
+            do{
+                kvar();
+
+                for (int j = 0; j < numProc; j++){
+                    if (j != process.myId){
+                        process.sendMsg(j, "Alive", runda, process.getDelta());
+                    }
+                }
+
+                for (int j = 0; j < numProc; j++){
+                    if (j != process.myId){
+                        process.provjeriProces(j);
+                    }
+                }
+
+                Thread.sleep(1000);
+
+            } while(process.kolikoSamPorukaPrimioURundi(runda)
+                    + process.kolikoJeProcesaOsumnjiceno()
+                    < numProc - 1);
+
+            System.out.println("--------------------------");
+            System.out.println("Dobio sam poruke od svih ili su mi postali sumnjivi");
+
+            process.ispisiSvePorukeURundi(runda);
+
+            process.obradiPoruke(runda);
+
+            process.novaRunda();
+        }
+
+        for (int j = 0; j < numProc; j++){
+            if (j != process.myId){
+                process.sendMsg(j, "Provjera", numProc, process.getVector());
+                kvar();
+            }
+        }
+
+        do{
+            kvar();
+
+            for (int j = 0; j < numProc; j++){
+                if (j != process.myId){
+                    process.sendMsg(j, "Alive", numProc, process.getVector());
+                }
+            }
+
+            for (int j = 0; j < numProc; j++){
+                if (j != process.myId){
+                    process.provjeriProces(j);
+                }
+            }
+
+            Thread.sleep(1000);
+
+        } while(process.kolikoSamZadnjihPorukaPrimio()
+                + process.kolikoJeProcesaOsumnjiceno()
+                < numProc - 1);
+
+        System.out.println("Završni vektor prije provjere je " + process.V);
+
+        for (int j = 0; j < numProc; j++){
+            process.provjeriZadnjePoruke(j);
+        }
+
+        System.out.println("Završni vektor nakon provjere je " + process.V);
+
+        for(int i = 0; i < process.V.size(); i++){
+            if(process.V.get(i) != null){
+                System.out.println("Svi procesi se slažu oko vrijednosti " + process.V.get(i));
+                break;
+            }
+        }
+    }
+
     public static void main(String[] args) {
         Linker comm = null;
         Msg m;
@@ -158,73 +246,11 @@ public class ConsensusTester {
                 (new ListenerThread(i,(MsgHandler)process)).start();
             }
             System.out.println("Dretve koje slušaju su pokrenute");
-            for(int runda=1; runda < numProc; runda++){
-                System.out.println("--------------------------");
-                System.out.println("Započeta "+runda+". runda");
 
-                for (int j = 0; j < numProc; j++){
-                    if (j != myId){
-                        process.sendMsg(j,"Consensus",runda,process.getDelta());
-                        kvar();
-                    }
-                }
-
-                do{
-                    kvar();
-                    for (int j = 0; j < numProc; j++){
-                        if (j != myId){
-                            process.sendMsg(j,"Alive",runda,process.getDelta());
-                        }
-                    }
-                    for (int j = 0; j < numProc; j++){
-                        if (j != myId){
-                            process.provjeriProces(j);
-                        }
-                    }
-                    Thread.sleep(1000);
-                }while(process.kolikoSamPorukaPrimioURundi(runda)+process.kolikoJeProcesaOsumnjiceno()<numProc-1);
-
-                System.out.println("--------------------------");
-                System.out.println("Dobio sam poruke od svih ili su mi postali sumnjivi");
-
-                process.ispisiSvePorukeURundi(runda);
-
-                process.obradiPoruke(runda);
-
-                process.novaRunda();
-                
-            }
-            for (int j = 0; j < numProc; j++){
-                    if (j != myId){
-                        process.sendMsg(j,"Provjera",numProc,process.getVector());
-                        kvar();
-                    }
-                }
-            do{
-                    kvar();
-                    for (int j = 0; j < numProc; j++){
-                        if (j != myId){
-                            process.sendMsg(j,"Alive",numProc,process.getVector());
-                        }
-                    }
-                    for (int j = 0; j < numProc; j++){
-                        if (j != myId){
-                            process.provjeriProces(j);
-                        }
-                    }
-                    Thread.sleep(1000);
-                }while(process.kolikoSamZadnjihPorukaPrimio()+process.kolikoJeProcesaOsumnjiceno()<numProc-1);
-            System.out.println("Završni vektor prije provjere je "+process.V);
-            for (int j = 0; j < numProc; j++){
-                    process.provjeriZadnjePoruke(j);
-                }
-            System.out.println("Završni vektor nakon provjere je "+process.V);
-            for(int i = 0; i < process.V.size() ; i++){
-                if(process.V.get(i)!=null){
-                    System.out.println("Svi procesi se slažu oko vrijednosti "+process.V.get(i));
-                    break;
-                }
-            }
+            //Ovo su dva algoritma koja implementiramo. 
+            //Odkomentiraj kojeg želiš testirati.
+            
+            //Consensus15_3(process,numProc);
 
             process.runConsensus();
         }
